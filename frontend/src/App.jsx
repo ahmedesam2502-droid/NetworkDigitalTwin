@@ -14,6 +14,23 @@ function App() {
   const [topology, setTopology] = useState(null);
   const [error, setError] = useState("");
 
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  const [addingDevice, setAddingDevice] = useState(false);
+
+  const [form, setForm] = useState({
+    name: "",
+    ip_address: "",
+    device_type: "router",
+  });
+
+  const handleInputChange = (event) => {
+    const { name, value } = event.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
   const loadTopology = () => {
     fetch(API_URL + "/topology")
       .then((response) => {
@@ -31,6 +48,55 @@ function App() {
         setError(err.message);
       });
   };
+  const handleAddDevice = async (event) => {
+    event.preventDefault();
+
+    if (!form.name || !form.ip_address) {
+      alert("Enter device name and IP address.");
+      return;
+    }
+
+    try {
+      setAddingDevice(true);
+
+      const url =
+        API_URL +
+        "/devices?name=" +
+        encodeURIComponent(form.name) +
+        "&ip_address=" +
+        encodeURIComponent(form.ip_address) +
+        "&device_type=" +
+        encodeURIComponent(form.device_type);
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message);
+      }
+
+      setForm({
+        name: "",
+        ip_address: "",
+        device_type: "router",
+      });
+
+      setShowAddDevice(false);
+
+      loadTopology();
+    } catch (err) {
+      alert("Failed to add device: " + err.message);
+    } finally {
+      setAddingDevice(false);
+    }
+  };
+
+
 
   useEffect(() => {
     loadTopology();
@@ -154,6 +220,12 @@ function App() {
           <span className="live-dot"></span>
           API Connected
         </div>
+        <button
+          className="add-device-button"
+          onClick={() => setShowAddDevice(true)}
+        >
+          + Add Device
+        </button>
       </header>
 
       <section className="stats">
@@ -238,6 +310,80 @@ function App() {
           );
         })}
       </section>
+      {showAddDevice && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h2>Add Device</h2>
+
+              <button
+                className="close-button"
+                onClick={() => setShowAddDevice(false)}
+              >
+                X
+              </button>
+            </div>
+
+            <form onSubmit={handleAddDevice}>
+              <label>
+                Device Name
+
+                <input
+                  type="text"
+                  name="name"
+                  value={form.name}
+                  onChange={handleInputChange}
+                  placeholder="Router-02"
+                />
+              </label>
+
+              <label>
+                IP Address
+
+                <input
+                  type="text"
+                  name="ip_address"
+                  value={form.ip_address}
+                  onChange={handleInputChange}
+                  placeholder="192.168.1.20"
+                />
+              </label>
+
+              <label>
+                Device Type
+
+                <select
+                  name="device_type"
+                  value={form.device_type}
+                  onChange={handleInputChange}
+                >
+                  <option value="router">Router</option>
+                  <option value="switch">Switch</option>
+                  <option value="server">Server</option>
+                </select>
+              </label>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="cancel-button"
+                  onClick={() => setShowAddDevice(false)}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="save-button"
+                  disabled={addingDevice}
+                >
+                  {addingDevice ? "Adding..." : "Add Device"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
