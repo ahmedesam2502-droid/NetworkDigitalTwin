@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -12,11 +13,21 @@ app = FastAPI(
 )
 
 
-# Create database tables
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 Base.metadata.create_all(bind=engine)
 
 
-# Database session
 def get_db():
     db = SessionLocal()
 
@@ -26,7 +37,6 @@ def get_db():
         db.close()
 
 
-# Root endpoint
 @app.get("/")
 def root():
     return {
@@ -34,7 +44,6 @@ def root():
     }
 
 
-# Health check
 @app.get("/health")
 def health():
     return {
@@ -42,7 +51,6 @@ def health():
     }
 
 
-# Database connection test
 @app.get("/db-test")
 def database_test():
     with engine.connect() as connection:
@@ -54,7 +62,6 @@ def database_test():
         }
 
 
-# Create a new network device
 @app.post("/devices")
 def create_device(
     name: str,
@@ -75,21 +82,19 @@ def create_device(
     return device
 
 
-# Get all network devices
 @app.get("/devices")
 def get_devices(db: Session = Depends(get_db)):
-    devices = db.query(Device).all()
-
-    return devices
+    return db.query(Device).all()
 
 
-# Get one network device by ID
 @app.get("/devices/{device_id}")
 def get_device(
     device_id: int,
     db: Session = Depends(get_db)
 ):
-    device = db.query(Device).filter(Device.id == device_id).first()
+    device = db.query(Device).filter(
+        Device.id == device_id
+    ).first()
 
     if device is None:
         raise HTTPException(
@@ -100,7 +105,6 @@ def get_device(
     return device
 
 
-# Update a network device
 @app.put("/devices/{device_id}")
 def update_device(
     device_id: int,
@@ -110,7 +114,9 @@ def update_device(
     status: str,
     db: Session = Depends(get_db)
 ):
-    device = db.query(Device).filter(Device.id == device_id).first()
+    device = db.query(Device).filter(
+        Device.id == device_id
+    ).first()
 
     if device is None:
         raise HTTPException(
@@ -129,13 +135,14 @@ def update_device(
     return device
 
 
-# Delete a network device
 @app.delete("/devices/{device_id}")
 def delete_device(
     device_id: int,
     db: Session = Depends(get_db)
 ):
-    device = db.query(Device).filter(Device.id == device_id).first()
+    device = db.query(Device).filter(
+        Device.id == device_id
+    ).first()
 
     if device is None:
         raise HTTPException(
@@ -152,7 +159,6 @@ def delete_device(
     }
 
 
-# Create a connection between two devices
 @app.post("/connections")
 def create_connection(
     source_device_id: int,
@@ -199,15 +205,11 @@ def create_connection(
 
     return connection
 
-# Get all network connections
 @app.get("/connections")
 def get_connections(db: Session = Depends(get_db)):
-    connections = db.query(Connection).all()
-
-    return connections
+    return db.query(Connection).all()
 
 
-# Get complete network topology
 @app.get("/topology")
 def get_topology(db: Session = Depends(get_db)):
     devices = db.query(Device).all()
