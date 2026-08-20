@@ -8,12 +8,14 @@ import {
 import "@xyflow/react/dist/style.css";
 import "./App.css";
 
+const API_URL = "http://127.0.0.1:8000";
+
 function App() {
   const [topology, setTopology] = useState(null);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetch("http://127.0.0.1:8000/topology")
+  const loadTopology = () => {
+    fetch(API_URL + "/topology")
       .then((response) => {
         if (!response.ok) {
           throw new Error("Backend returned an error");
@@ -23,10 +25,21 @@ function App() {
       })
       .then((data) => {
         setTopology(data);
+        setError("");
       })
       .catch((err) => {
         setError(err.message);
       });
+  };
+
+  useEffect(() => {
+    loadTopology();
+
+    const interval = setInterval(loadTopology, 5000);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, []);
 
   const nodes = useMemo(() => {
@@ -84,13 +97,9 @@ function App() {
 
     return topology.connections.map((connection) => ({
       id: String(connection.id),
-
       source: String(connection.source_device_id),
-
       target: String(connection.target_device_id),
-
       label: connection.connection_type,
-
       animated: connection.status === "up",
 
       style: {
@@ -107,6 +116,10 @@ function App() {
         <div className="error">
           <h2>Connection Error</h2>
           <p>{error}</p>
+
+          <button onClick={loadTopology}>
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -134,9 +147,7 @@ function App() {
       <header className="header">
         <div>
           <h1>Network Digital Twin</h1>
-          <p>
-            Real-time network topology monitoring
-          </p>
+          <p>Real-time network topology monitoring</p>
         </div>
 
         <div className="header-status">
@@ -172,16 +183,16 @@ function App() {
           <h2>Network Topology</h2>
 
           <span>
-            {topology.devices.length} devices ·{" "}
+            {topology.devices.length} devices -{" "}
             {topology.connections.length} connections
           </span>
         </div>
+
         <div className="flow-container">
           <ReactFlow
             nodes={nodes}
             edges={edges}
             fitView
-            attributionPosition="bottom-left"
           >
             <Background />
             <Controls />
@@ -210,17 +221,17 @@ function App() {
               key={connection.id}
             >
               <strong>
-                {source?.name}
+                {source ? source.name : "Unknown"}
               </strong>
 
               <span>→</span>
 
               <strong>
-                {target?.name}
+                {target ? target.name : "Unknown"}
               </strong>
 
               <small>
-                {connection.connection_type} ·{" "}
+                {connection.connection_type} -{" "}
                 {connection.status}
               </small>
             </div>
