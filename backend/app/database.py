@@ -1,7 +1,17 @@
 from sqlalchemy import create_engine
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-DATABASE_URL = "postgresql+psycopg://postgres:ahmedessam%4090@localhost:5432/network_digital_twin"
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not set. Create a .env file in backend/ with DATABASE_URL=..."
+    )
 
 engine = create_engine(DATABASE_URL)
 
