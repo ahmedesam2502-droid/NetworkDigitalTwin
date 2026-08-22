@@ -34,6 +34,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://network-digital-twin-jet.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -649,7 +650,7 @@ def simulate_device(
     status: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
-):
+):  
     device = db.query(Device).filter(
         Device.id == device_id
     ).first()
