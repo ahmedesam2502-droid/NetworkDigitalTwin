@@ -200,8 +200,8 @@ button {
 /* Device Nodes */
 
 .device-node {
-  min-width: 150px;
-  padding: 14px 18px;
+  min-width: 130px;
+  padding: 10px 12px;
   text-align: center;
 }
 
@@ -209,14 +209,14 @@ button {
   display: block;
   margin-bottom: 5px;
   color: #f8fafc;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .device-node>span {
   display: block;
   margin-bottom: 8px;
   color: #8292a8;
-  font-size: 12px;
+  font-size: 11px;
   font-family: Consolas, monospace;
 }
 
@@ -241,37 +241,29 @@ button {
   border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
-/* Device node action buttons (Check / Set Online / Set Offline) */
+/* Device node action buttons (Edit / Check / Set Online / Set Offline / Delete) */
 
 .node-buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  margin: 8px 0;
-}
-
-.edit-device-button {
-  background: #f59e0b;
-  color: #1a1400;
-  min-width: 0;
-  font-size: 11px;
-  padding: 5px 4px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  grid-column: span 2;
+  gap: 3px;
+  margin: 6px 0;
 }
 
 .check-device-button,
 .simulate-online-button,
 .simulate-offline-button,
-.delete-device-button {
-  background: #7f1d1d;
-  color: #fecaca;
-  grid-column: span 2;
+.delete-device-button,
+.edit-device-button {
+  min-width: 0;
+  font-size: 9px;
+  padding: 3px 3px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .check-device-button {
@@ -287,6 +279,18 @@ button {
 .simulate-offline-button {
   background: #ef4444;
   color: #2a0d0d;
+}
+
+.edit-device-button {
+  background: #f59e0b;
+  color: #1a1400;
+  grid-column: span 2;
+}
+
+.delete-device-button {
+  background: #7f1d1d;
+  color: #fecaca;
+  grid-column: span 2;
 }
 
 /* Connections */
@@ -306,7 +310,7 @@ button {
 .connection {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
   min-height: 54px;
   margin-bottom: 9px;
   padding: 12px 15px;
@@ -671,8 +675,8 @@ button {
   }
 
   .device-node {
-    min-width: 130px;
-    padding: 10px 12px;
+    min-width: 110px;
+    padding: 8px 10px;
   }
 
   .node-buttons {
@@ -681,9 +685,11 @@ button {
 
   .check-device-button,
   .simulate-online-button,
-  .simulate-offline-button {
-    padding: 3px 6px;
-    font-size: 10px;
+  .simulate-offline-button,
+  .delete-device-button,
+  .edit-device-button {
+    padding: 3px 3px;
+    font-size: 8px;
   }
 
   .modal {

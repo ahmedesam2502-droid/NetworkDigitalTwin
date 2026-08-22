@@ -530,8 +530,8 @@ def delete_connection(
 def get_topology(
     db: Session = Depends(get_db)
 ):
-    devices = db.query(Device).all()
-    connections = db.query(Connection).all()
+    devices = db.query(Device).order_by(Device.id).all()
+    connections = db.query(Connection).order_by(Connection.id).all()
 
     return {
         "devices": [

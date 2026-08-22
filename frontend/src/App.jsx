@@ -416,13 +416,29 @@ function App() {
       clearInterval(interval);
     };
   }, []);
-
-  const nodes = useMemo(() => {
+  const structureKey = useMemo(() => {
     if (!topology) {
-      return [];
+      return "";
     }
 
-    // Build adjacency list from connections (undirected, for layout purposes)
+    const deviceIds = topology.devices
+      .map((device) => device.id)
+      .sort((a, b) => a - b)
+      .join(",");
+
+    const connectionKeys = topology.connections
+      .map((connection) => `${connection.source_device_id}-${connection.target_device_id}`)
+      .sort()
+      .join(",");
+
+    return deviceIds + "|" + connectionKeys;
+  }, [topology]);
+
+  const positionById = useMemo(() => {
+    if (!topology) {
+      return new Map();
+    }
+
     const adjacency = new Map();
 
     topology.devices.forEach((device) => {
@@ -443,7 +459,6 @@ function App() {
       }
     });
 
-    // Roots: routers first, otherwise any device with no incoming connection
     const targetIds = new Set(
       topology.connections.map(
         (connection) => connection.target_device_id
@@ -461,7 +476,6 @@ function App() {
         ? roots.map((device) => device.id)
         : topology.devices.slice(0, 1).map((device) => device.id);
 
-    // BFS to assign each device a level (depth)
     const levelOf = new Map();
     const queue = [];
 
@@ -482,7 +496,6 @@ function App() {
       });
     }
 
-    // Any device never reached (disconnected) goes on its own trailing level
     let maxLevel = 0;
 
     levelOf.forEach((level) => {
@@ -498,7 +511,6 @@ function App() {
       }
     });
 
-    // Group devices by level, then assign x/y positions per group
     const devicesByLevel = new Map();
 
     topology.devices.forEach((device) => {
@@ -512,9 +524,9 @@ function App() {
     });
 
     const LEVEL_HEIGHT = 340;
-    const NODE_WIDTH = 280;
+    const NODE_WIDTH = 300;
 
-    const positionById = new Map();
+    const result = new Map();
 
     Array.from(devicesByLevel.keys())
       .sort((a, b) => a - b)
@@ -524,745 +536,757 @@ function App() {
         const startX = 500 - rowWidth / 2;
 
         devicesInLevel.forEach((device, index) => {
-          positionById.set(device.id, {
+          result.set(device.id, {
             x: startX + index * NODE_WIDTH,
             y: level * LEVEL_HEIGHT + 50,
           });
         });
       });
 
-    return topology.devices.map((device) => {
-      const position = positionById.get(device.id) || {
-        x: 100,
-        y: 100,
-      };
-
-      let icon = "💻";
-
-      if (device.device_type === "router") {
-        icon = "🌐";
-      } else if (device.device_type === "switch") {
-        icon = "🔀";
-      } else if (device.device_type === "server") {
-        icon = "🗄️";
-      }
-
-      return {
-        id: String(device.id),
-
-        position,
-
-        data: {
-          label: (
-            <div className="device-node">
-              <div className="node-icon">
-                {icon}
-              </div>
-
-              <strong>{device.name}</strong>
-
-              <div className="node-buttons">
-                <button
-                  className="edit-device-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openEditDevice(device);
-                  }}
-                >
-                  Edit
-                </button>
-
-                <button
-                  className="check-device-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    checkDevice(device.id);
-                  }}
-                >
-                  Check
-                </button>
-
-                <button
-                  className="simulate-online-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    simulateDevice(device.id, "online");
-                  }}
-                >
-                  Set Online
-                </button>
-
-                <button
-                  className="simulate-offline-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    simulateDevice(device.id, "offline");
-                  }}
-                >
-                  Set Offline
-                </button>
-
-                <button
-                  className="delete-device-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    deleteDevice(device.id);
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-
-              <span>{device.ip_address}</span>
-
-              <span className={"device-status " + device.status}>
-                {device.status}
-              </span>
-            </div>
-          ),
-        },
-
-        style: {
-          minWidth: "180px",
-          padding: "0",
-          borderRadius: "14px",
-          border:
-            device.status === "online"
-              ? "2px solid #22c55e"
-              : "2px solid #ef4444",
-
-          background:
-            device.status === "online"
-              ? "#0f2418"
-              : "#2a1515",
-
-          color: "#ffffff",
-
-          boxShadow:
-            device.status === "online"
-              ? "0 0 20px rgba(34,197,94,0.15)"
-              : "0 0 20px rgba(239,68,68,0.12)",
-        },
-      };
-    });
-  }, [topology]);
-
-  const edges = useMemo(() => {
+    return result;
+  }, [structureKey]);
+  const nodes = useMemo(() => {
     if (!topology) {
       return [];
     }
 
-    return topology.connections.map((connection) => ({
-      id: String(connection.id),
+    const nodes = useMemo(() => {
+      if (!topology) {
+        return [];
+      }
 
-      source: String(
-        connection.source_device_id
-      ),
+      return topology.devices.map((device) => {
+        const position = positionById.get(device.id) || {
+          x: 100,
+          y: 100,
+        };
 
-      target: String(
-        connection.target_device_id
-      ),
+        let icon = "💻";
 
-      label: connection.connection_type,
+        if (device.device_type === "router") {
+          icon = "🌐";
+        } else if (device.device_type === "switch") {
+          icon = "🔀";
+        } else if (device.device_type === "server") {
+          icon = "🗄️";
+        }
 
-      animated:
-        connection.status === "up",
+        return {
+          id: String(device.id),
 
-      style: {
-        stroke:
-          connection.status === "up"
-            ? "#38bdf8"
-            : "#ef4444",
+          position,
 
-        strokeWidth: 3,
-      },
-    }));
-  }, [topology]);
+          data: {
+            label: (
+              <div className="device-node">
+                <div className="node-icon">
+                  {icon}
+                </div>
 
-  if (!token) {
-    return (
-      <Auth
-        apiUrl={API_URL}
-        onAuthSuccess={(newToken) => setToken(newToken)}
-      />
-    );
-  }
+                <strong>{device.name}</strong>
 
-  if (error) {
-    return (
-      <div className="app">
-        <h1>Network Digital Twin</h1>
-
-        <div className="error">
-          <h2>Connection Error</h2>
-
-          <p>{error}</p>
-
-          <button onClick={loadTopology}>
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!topology) {
-    return (
-      <div className="app">
-        <h1>Network Digital Twin</h1>
-
-        <p>
-          Loading network topology...
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="app">
-
-      <header className="header">
-
-        <div>
-          <h1>
-            Network Digital Twin
-          </h1>
-
-          <p>
-            Real-time network topology monitoring
-          </p>
-        </div>
-
-        <div className="header-status">
-          <span className="live-dot"></span>
-          API Connected
-        </div>
-
-        <button
-          className="add-device-button"
-          onClick={() =>
-            setShowAddDevice(true)
-          }
-        >
-          + Add Device
-        </button>
-
-        <button
-          className="add-connection-button"
-          onClick={() =>
-            setShowAddConnection(true)
-          }
-        >
-          + Add Connection
-        </button>
-
-        <button
-          className="logout-button"
-          onClick={handleLogout}
-        >
-          Logout
-        </button>
-
-      </header>
-
-      <section className="stats">
-
-        <div className="stat-card">
-          <span>Devices</span>
-          <strong>
-            {stats.total_devices}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Connections</span>
-          <strong>
-            {stats.total_connections}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Online</span>
-          <strong>
-            {stats.online_devices}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Offline</span>
-          <strong>
-            {stats.offline_devices}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Active Connections</span>
-          <strong>
-            {stats.active_connections}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Down Connections</span>
-          <strong>
-            {stats.down_connections}
-          </strong>
-        </div>
-
-      </section>
-
-      <section className="topology-container">
-
-        <div className="section-header">
-
-          <h2>
-            Network Topology
-          </h2>
-
-          <span>
-            {topology.devices.length} devices
-            {" - "}
-            {topology.connections.length} connections
-          </span>
-
-        </div>
-
-        <div className="flow-container">
-
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            fitView
-          >
-            <Background />
-            <Controls />
-            <MiniMap />
-          </ReactFlow>
-
-        </div>
-
-      </section>
-
-      <section className="connections">
-
-        <h2>
-          Connections
-        </h2>
-        {topology.connections.length === 0 ? (
-          <p>
-            No connections found.
-          </p>
-        ) : (
-          topology.connections.map(
-            (connection) => {
-              const source =
-                topology.devices.find(
-                  (device) =>
-                    device.id ===
-                    connection.source_device_id
-                );
-
-              const target =
-                topology.devices.find(
-                  (device) =>
-                    device.id ===
-                    connection.target_device_id
-                );
-
-              return (
-                <div
-                  className="connection"
-                  key={connection.id}
-                >
-                  <strong>
-                    {source
-                      ? source.name
-                      : "Unknown"}
-                  </strong>
-
-                  <span>
-                    →
-                  </span>
-
-                  <strong>
-                    {target
-                      ? target.name
-                      : "Unknown"}
-                  </strong>
-
-                  <small>
-                    {connection.connection_type}
-                    {" - "}
-                    {connection.status}
-                  </small>
+                <div className="node-buttons">
+                  <button
+                    className="edit-device-button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openEditDevice(device);
+                    }}
+                  >
+                    Edit
+                  </button>
 
                   <button
-                    className="delete-connection-button"
-                    onClick={() =>
-                      deleteConnection(connection.id)
-                    }
+                    className="check-device-button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      checkDevice(device.id);
+                    }}
+                  >
+                    Check
+                  </button>
+
+                  <button
+                    className="simulate-online-button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      simulateDevice(device.id, "online");
+                    }}
+                  >
+                    Set Online
+                  </button>
+
+                  <button
+                    className="simulate-offline-button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      simulateDevice(device.id, "offline");
+                    }}
+                  >
+                    Set Offline
+                  </button>
+
+                  <button
+                    className="delete-device-button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      deleteDevice(device.id);
+                    }}
                   >
                     Delete
                   </button>
                 </div>
-              );
+
+                <span>{device.ip_address}</span>
+
+                <span className={"device-status " + device.status}>
+                  {device.status}
+                </span>
+              </div>
+            ),
+          },
+
+          style: {
+            minWidth: "180px",
+            padding: "0",
+            borderRadius: "14px",
+            border:
+              device.status === "online"
+                ? "2px solid #22c55e"
+                : "2px solid #ef4444",
+
+            background:
+              device.status === "online"
+                ? "#0f2418"
+                : "#2a1515",
+
+            color: "#ffffff",
+
+            boxShadow:
+              device.status === "online"
+                ? "0 0 20px rgba(34,197,94,0.15)"
+                : "0 0 20px rgba(239,68,68,0.12)",
+          },
+        };
+      });
+    }, [topology, positionById]);
+
+    const edges = useMemo(() => {
+      if (!topology) {
+        return [];
+      }
+
+      return topology.connections.map((connection) => ({
+        id: String(connection.id),
+
+        source: String(
+          connection.source_device_id
+        ),
+
+        target: String(
+          connection.target_device_id
+        ),
+
+        label: connection.connection_type,
+
+        animated:
+          connection.status === "up",
+
+        style: {
+          stroke:
+            connection.status === "up"
+              ? "#38bdf8"
+              : "#ef4444",
+
+          strokeWidth: 3,
+        },
+      }));
+    }, [topology]);
+
+    if (!token) {
+      return (
+        <Auth
+          apiUrl={API_URL}
+          onAuthSuccess={(newToken) => setToken(newToken)}
+        />
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="app">
+          <h1>Network Digital Twin</h1>
+
+          <div className="error">
+            <h2>Connection Error</h2>
+
+            <p>{error}</p>
+
+            <button onClick={loadTopology}>
+              Retry
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (!topology) {
+      return (
+        <div className="app">
+          <h1>Network Digital Twin</h1>
+
+          <p>
+            Loading network topology...
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="app">
+
+        <header className="header">
+
+          <div>
+            <h1>
+              Network Digital Twin
+            </h1>
+
+            <p>
+              Real-time network topology monitoring
+            </p>
+          </div>
+
+          <div className="header-status">
+            <span className="live-dot"></span>
+            API Connected
+          </div>
+
+          <button
+            className="add-device-button"
+            onClick={() =>
+              setShowAddDevice(true)
             }
-          )
-        )}
+          >
+            + Add Device
+          </button>
 
-      </section>
-      {showAddDevice && (
-        <div className="modal-overlay">
+          <button
+            className="add-connection-button"
+            onClick={() =>
+              setShowAddConnection(true)
+            }
+          >
+            + Add Connection
+          </button>
 
-          <div className="modal">
+          <button
+            className="logout-button"
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
 
-            <div className="modal-header">
+        </header>
 
-              <h2>
-                Add Device
-              </h2>
+        <section className="stats">
 
-              <button
-                className="close-button"
-                onClick={() =>
-                  setShowAddDevice(false)
-                }
-              >
-                X
-              </button>
+          <div className="stat-card">
+            <span>Devices</span>
+            <strong>
+              {stats.total_devices}
+            </strong>
+          </div>
 
-            </div>
+          <div className="stat-card">
+            <span>Connections</span>
+            <strong>
+              {stats.total_connections}
+            </strong>
+          </div>
 
-            <form
-              onSubmit={handleAddDevice}
+          <div className="stat-card">
+            <span>Online</span>
+            <strong>
+              {stats.online_devices}
+            </strong>
+          </div>
+
+          <div className="stat-card">
+            <span>Offline</span>
+            <strong>
+              {stats.offline_devices}
+            </strong>
+          </div>
+
+          <div className="stat-card">
+            <span>Active Connections</span>
+            <strong>
+              {stats.active_connections}
+            </strong>
+          </div>
+
+          <div className="stat-card">
+            <span>Down Connections</span>
+            <strong>
+              {stats.down_connections}
+            </strong>
+          </div>
+
+        </section>
+
+        <section className="topology-container">
+
+          <div className="section-header">
+
+            <h2>
+              Network Topology
+            </h2>
+
+            <span>
+              {topology.devices.length} devices
+              {" - "}
+              {topology.connections.length} connections
+            </span>
+
+          </div>
+
+          <div className="flow-container">
+
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              fitView
             >
+              <Background />
+              <Controls />
+              <MiniMap />
+            </ReactFlow>
 
-              <label>
-                Device Name
+          </div>
 
-                <input
-                  type="text"
-                  name="name"
-                  value={form.name}
-                  onChange={
-                    handleInputChange
-                  }
-                  placeholder="Router-02"
-                  required
-                />
-              </label>
+        </section>
 
-              <label>
-                IP Address
+        <section className="connections">
 
-                <input
-                  type="text"
-                  name="ip_address"
-                  value={form.ip_address}
-                  onChange={
-                    handleInputChange
-                  }
-                  placeholder="192.168.1.20"
-                  required
-                />
-              </label>
+          <h2>
+            Connections
+          </h2>
+          {topology.connections.length === 0 ? (
+            <p>
+              No connections found.
+            </p>
+          ) : (
+            topology.connections.map(
+              (connection) => {
+                const source =
+                  topology.devices.find(
+                    (device) =>
+                      device.id ===
+                      connection.source_device_id
+                  );
 
-              <label>
-                Device Type
+                const target =
+                  topology.devices.find(
+                    (device) =>
+                      device.id ===
+                      connection.target_device_id
+                  );
 
-                <select
-                  name="device_type"
-                  value={form.device_type}
-                  onChange={
-                    handleInputChange
-                  }
-                >
-                  <option value="router">
-                    Router
-                  </option>
+                return (
+                  <div
+                    className="connection"
+                    key={connection.id}
+                  >
+                    <strong>
+                      {source
+                        ? source.name
+                        : "Unknown"}
+                    </strong>
 
-                  <option value="switch">
-                    Switch
-                  </option>
+                    <span>
+                      →
+                    </span>
 
-                  <option value="server">
-                    Server
-                  </option>
-                </select>
-              </label>
+                    <strong>
+                      {target
+                        ? target.name
+                        : "Unknown"}
+                    </strong>
 
-              <div className="modal-actions">
+                    <small>
+                      {connection.connection_type}
+                      {" - "}
+                      {connection.status}
+                    </small>
+
+                    <button
+                      className="delete-connection-button"
+                      onClick={() =>
+                        deleteConnection(connection.id)
+                      }
+                    >
+                      Delete
+                    </button>
+                  </div>
+                );
+              }
+            )
+          )}
+
+        </section>
+        {showAddDevice && (
+          <div className="modal-overlay">
+
+            <div className="modal">
+
+              <div className="modal-header">
+
+                <h2>
+                  Add Device
+                </h2>
 
                 <button
-                  type="button"
-                  className="cancel-button"
+                  className="close-button"
                   onClick={() =>
                     setShowAddDevice(false)
                   }
                 >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="save-button"
-                  disabled={addingDevice}
-                >
-                  {addingDevice
-                    ? "Adding..."
-                    : "Add Device"}
+                  X
                 </button>
 
               </div>
 
-            </form>
-
-          </div>
-
-        </div>
-      )}
-      {showEditDevice && (
-        <div className="modal-overlay">
-
-          <div className="modal">
-
-            <div className="modal-header">
-
-              <h2>
-                Edit Device
-              </h2>
-
-              <button
-                className="close-button"
-                onClick={() =>
-                  setShowEditDevice(false)
-                }
+              <form
+                onSubmit={handleAddDevice}
               >
-                X
-              </button>
+
+                <label>
+                  Device Name
+
+                  <input
+                    type="text"
+                    name="name"
+                    value={form.name}
+                    onChange={
+                      handleInputChange
+                    }
+                    placeholder="Router-02"
+                    required
+                  />
+                </label>
+
+                <label>
+                  IP Address
+
+                  <input
+                    type="text"
+                    name="ip_address"
+                    value={form.ip_address}
+                    onChange={
+                      handleInputChange
+                    }
+                    placeholder="192.168.1.20"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Device Type
+
+                  <select
+                    name="device_type"
+                    value={form.device_type}
+                    onChange={
+                      handleInputChange
+                    }
+                  >
+                    <option value="router">
+                      Router
+                    </option>
+
+                    <option value="switch">
+                      Switch
+                    </option>
+
+                    <option value="server">
+                      Server
+                    </option>
+                  </select>
+                </label>
+
+                <div className="modal-actions">
+
+                  <button
+                    type="button"
+                    className="cancel-button"
+                    onClick={() =>
+                      setShowAddDevice(false)
+                    }
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="save-button"
+                    disabled={addingDevice}
+                  >
+                    {addingDevice
+                      ? "Adding..."
+                      : "Add Device"}
+                  </button>
+
+                </div>
+
+              </form>
 
             </div>
 
-            <form
-              onSubmit={handleEditDevice}
-            >
+          </div>
+        )}
+        {showEditDevice && (
+          <div className="modal-overlay">
 
-              <label>
-                Device Name
+            <div className="modal">
 
-                <input
-                  type="text"
-                  name="name"
-                  value={editForm.name}
-                  onChange={
-                    handleEditInputChange
-                  }
-                  required
-                />
-              </label>
+              <div className="modal-header">
 
-              <label>
-                IP Address
-
-                <input
-                  type="text"
-                  name="ip_address"
-                  value={editForm.ip_address}
-                  onChange={
-                    handleEditInputChange
-                  }
-                  required
-                />
-              </label>
-
-              <label>
-                Device Type
-
-                <select
-                  name="device_type"
-                  value={editForm.device_type}
-                  onChange={
-                    handleEditInputChange
-                  }
-                >
-                  <option value="router">
-                    Router
-                  </option>
-
-                  <option value="switch">
-                    Switch
-                  </option>
-
-                  <option value="server">
-                    Server
-                  </option>
-                </select>
-              </label>
-
-              <div className="modal-actions">
+                <h2>
+                  Edit Device
+                </h2>
 
                 <button
-                  type="button"
-                  className="cancel-button"
+                  className="close-button"
                   onClick={() =>
                     setShowEditDevice(false)
                   }
                 >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="save-button"
-                  disabled={editingDevice}
-                >
-                  {editingDevice
-                    ? "Saving..."
-                    : "Save Changes"}
+                  X
                 </button>
 
               </div>
 
-            </form>
-
-          </div>
-
-        </div>
-      )}
-      {showAddConnection && (
-        <div className="modal-overlay">
-
-          <div className="modal">
-
-            <div className="modal-header">
-
-              <h2>
-                Add Connection
-              </h2>
-
-              <button
-                className="close-button"
-                onClick={() =>
-                  setShowAddConnection(false)
-                }
+              <form
+                onSubmit={handleEditDevice}
               >
-                X
-              </button>
+
+                <label>
+                  Device Name
+
+                  <input
+                    type="text"
+                    name="name"
+                    value={editForm.name}
+                    onChange={
+                      handleEditInputChange
+                    }
+                    required
+                  />
+                </label>
+
+                <label>
+                  IP Address
+
+                  <input
+                    type="text"
+                    name="ip_address"
+                    value={editForm.ip_address}
+                    onChange={
+                      handleEditInputChange
+                    }
+                    required
+                  />
+                </label>
+
+                <label>
+                  Device Type
+
+                  <select
+                    name="device_type"
+                    value={editForm.device_type}
+                    onChange={
+                      handleEditInputChange
+                    }
+                  >
+                    <option value="router">
+                      Router
+                    </option>
+
+                    <option value="switch">
+                      Switch
+                    </option>
+
+                    <option value="server">
+                      Server
+                    </option>
+                  </select>
+                </label>
+
+                <div className="modal-actions">
+
+                  <button
+                    type="button"
+                    className="cancel-button"
+                    onClick={() =>
+                      setShowEditDevice(false)
+                    }
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="save-button"
+                    disabled={editingDevice}
+                  >
+                    {editingDevice
+                      ? "Saving..."
+                      : "Save Changes"}
+                  </button>
+
+                </div>
+
+              </form>
 
             </div>
 
-            <form
-              onSubmit={handleAddConnection}
-            >
+          </div>
+        )}
+        {showAddConnection && (
+          <div className="modal-overlay">
 
-              <label>
-                Source Device
+            <div className="modal">
 
-                <select
-                  name="source_device_id"
-                  value={connectionForm.source_device_id}
-                  onChange={
-                    handleConnectionInputChange
-                  }
-                  required
-                >
-                  <option value="">
-                    Select a device
-                  </option>
+              <div className="modal-header">
 
-                  {topology.devices.map((device) => (
-                    <option
-                      key={device.id}
-                      value={device.id}
-                    >
-                      {device.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Target Device
-
-                <select
-                  name="target_device_id"
-                  value={connectionForm.target_device_id}
-                  onChange={
-                    handleConnectionInputChange
-                  }
-                  required
-                >
-                  <option value="">
-                    Select a device
-                  </option>
-
-                  {topology.devices.map((device) => (
-                    <option
-                      key={device.id}
-                      value={device.id}
-                    >
-                      {device.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Connection Type
-
-                <select
-                  name="connection_type"
-                  value={connectionForm.connection_type}
-                  onChange={
-                    handleConnectionInputChange
-                  }
-                >
-                  <option value="ethernet">
-                    Ethernet
-                  </option>
-
-                  <option value="fiber">
-                    Fiber
-                  </option>
-
-                  <option value="wireless">
-                    Wireless
-                  </option>
-                </select>
-              </label>
-
-              <div className="modal-actions">
+                <h2>
+                  Add Connection
+                </h2>
 
                 <button
-                  type="button"
-                  className="cancel-button"
+                  className="close-button"
                   onClick={() =>
                     setShowAddConnection(false)
                   }
                 >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="save-button"
-                  disabled={addingConnection}
-                >
-                  {addingConnection
-                    ? "Adding..."
-                    : "Add Connection"}
+                  X
                 </button>
 
               </div>
 
-            </form>
+              <form
+                onSubmit={handleAddConnection}
+              >
+
+                <label>
+                  Source Device
+
+                  <select
+                    name="source_device_id"
+                    value={connectionForm.source_device_id}
+                    onChange={
+                      handleConnectionInputChange
+                    }
+                    required
+                  >
+                    <option value="">
+                      Select a device
+                    </option>
+
+                    {topology.devices.map((device) => (
+                      <option
+                        key={device.id}
+                        value={device.id}
+                      >
+                        {device.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Target Device
+
+                  <select
+                    name="target_device_id"
+                    value={connectionForm.target_device_id}
+                    onChange={
+                      handleConnectionInputChange
+                    }
+                    required
+                  >
+                    <option value="">
+                      Select a device
+                    </option>
+
+                    {topology.devices.map((device) => (
+                      <option
+                        key={device.id}
+                        value={device.id}
+                      >
+                        {device.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Connection Type
+
+                  <select
+                    name="connection_type"
+                    value={connectionForm.connection_type}
+                    onChange={
+                      handleConnectionInputChange
+                    }
+                  >
+                    <option value="ethernet">
+                      Ethernet
+                    </option>
+
+                    <option value="fiber">
+                      Fiber
+                    </option>
+
+                    <option value="wireless">
+                      Wireless
+                    </option>
+                  </select>
+                </label>
+
+                <div className="modal-actions">
+
+                  <button
+                    type="button"
+                    className="cancel-button"
+                    onClick={() =>
+                      setShowAddConnection(false)
+                    }
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="save-button"
+                    disabled={addingConnection}
+                  >
+                    {addingConnection
+                      ? "Adding..."
+                      : "Add Connection"}
+                  </button>
+
+                </div>
+
+              </form>
+
+            </div>
 
           </div>
-
-        </div>
-      )}
-    </div>
-  );
-}
+        )}
+      </div>
+    );
+  }
 
 export default App;
