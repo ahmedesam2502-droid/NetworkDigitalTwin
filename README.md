@@ -2,8 +2,13 @@
 
 A full-stack web application that creates a live digital twin of a network — visualizing devices, connections, and their real-time status through an interactive topology map.
 
-![Status](https://img.shields.io/badge/status-active-success)
+![Status](https://img.shields.io/badge/status-live-success)
 ![License](https://img.shields.io/badge/license-MIT-blue)
+
+**🔗 Live Demo:** [network-digital-twin-jet.vercel.app](https://network-digital-twin-jet.vercel.app)
+**🔗 API Docs:** [network-digital-twin-api.onrender.com/docs](https://network-digital-twin-api.onrender.com/docs)
+
+> ⚠️ The backend is hosted on Render's free tier, which spins down after inactivity. The first request after idling can take up to ~50 seconds to respond while it wakes up.
 
 ---
 
@@ -41,9 +46,13 @@ Network Digital Twin lets you model a network's infrastructure digitally: add ro
 - React Flow (`@xyflow/react`) for the topology visualization
 - Vanilla CSS (custom dark theme, fully responsive)
 
+**Deployment**
+- Backend + Database: [Render](https://render.com)
+- Frontend: [Vercel](https://vercel.com)
+
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started (Local Development)
 
 ### Prerequisites
 - Python 3.11+
@@ -104,49 +113,59 @@ App will be available at `http://localhost:5173`.
 
 ## 📡 API Reference
 
-| Method | Endpoint | Auth Required | Description |
-|---|---|---|---|
-| POST | `/register` | ❌ | Create a new user account |
-| POST | `/login` | ❌ | Log in and receive a JWT token |
-| GET | `/me` | ✅ | Get the current authenticated user |
-| GET | `/devices` | ❌ | List all devices |
-| POST | `/devices` | ✅ | Add a new device |
-| GET | `/devices/{id}` | ❌ | Get a single device |
-| PUT | `/devices/{id}` | ✅ | Update a device |
-| DELETE | `/devices/{id}` | ✅ | Delete a device (and its connections) |
-| POST | `/devices/{id}/check` | ✅ | Ping-check a device's reachability |
-| POST | `/devices/{id}/simulate` | ✅ | Manually set a device's status |
-| GET | `/connections` | ❌ | List all connections |
-| POST | `/connections` | ✅ | Create a connection between two devices |
-| DELETE | `/connections/{id}` | ✅ | Delete a connection |
-| GET | `/topology` | ❌ | Get full network topology (devices + connections) |
-| GET | `/dashboard/stats` | ❌ | Get aggregate dashboard statistics |
+| Method | Endpoint | Auth Required | Rate Limit | Description |
+|---|---|---|---|---|
+| POST | `/register` | ❌ | 5/min | Create a new user account |
+| POST | `/login` | ❌ | 5/min | Log in and receive a JWT token |
+| GET | `/me` | ✅ | — | Get the current authenticated user |
+| GET | `/devices` | ❌ | — | List all devices |
+| POST | `/devices` | ✅ | 30/min | Add a new device |
+| GET | `/devices/{id}` | ❌ | — | Get a single device |
+| PUT | `/devices/{id}` | ✅ | 30/min | Update a device |
+| DELETE | `/devices/{id}` | ✅ | 30/min | Delete a device (and its connections) |
+| POST | `/devices/{id}/check` | ✅ | 30/min | Ping-check a device's reachability |
+| POST | `/devices/{id}/simulate` | ✅ | 30/min | Manually set a device's status |
+| POST | `/devices/check-all` | ✅ | 10/min | Ping-check every device at once |
+| GET | `/connections` | ❌ | — | List all connections |
+| POST | `/connections` | ✅ | 30/min | Create a connection between two devices |
+| DELETE | `/connections/{id}` | ✅ | 30/min | Delete a connection |
+| GET | `/topology` | ❌ | — | Get full network topology (devices + connections) |
+| GET | `/dashboard/stats` | ❌ | — | Get aggregate dashboard statistics |
 
-Full interactive documentation available at `/docs` (Swagger UI) once the backend is running.
+Full interactive documentation available at [`/docs`](https://network-digital-twin-api.onrender.com/docs) (Swagger UI).
 
 ---
 
 ## 🔒 Security
 
 - Passwords hashed with bcrypt, never stored in plain text
-- JWT tokens signed with a random, environment-stored secret key
+- JWT tokens signed with a random, environment-stored secret key (24h expiry)
 - All write/delete endpoints require a valid authentication token
 - Rate limiting on all sensitive endpoints (auth + data mutation)
 - SQL injection protected via SQLAlchemy's ORM (no raw queries)
+- CORS restricted to known frontend origins
 - Secrets (`DATABASE_URL`, `JWT_SECRET_KEY`) kept out of source control via `.gitignore`
 
 ---
 
 ## 📸 Screenshots
 
-> _Add screenshots of the login screen, dashboard, and topology view here._
+### Login & Registration
+![Login screen](screenshots/login.png)
+
+### Dashboard & Network Topology
+![Dashboard with topology](screenshots/dashboard.png)
+
+### Adding a Device
+![Add device modal](screenshots/add-device.png)
 
 ---
 
 ## 🗺️ Roadmap
 
 - [ ] Email verification on registration
-- [ ] Production deployment
+- [ ] Activity/event log for device and connection changes
+- [ ] Device detail pages with historical monitoring
 - [ ] Further UI polish
 
 ---
