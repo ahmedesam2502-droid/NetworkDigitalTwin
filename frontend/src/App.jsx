@@ -434,6 +434,82 @@ function App() {
     return deviceIds + "|" + connectionKeys;
   }, [topology]);
 
+  const reachableIds = useMemo(() => {
+    if (!topology) {
+      return new Set();
+    }
+
+    const adjacency = new Map();
+
+    topology.devices.forEach((device) => {
+      adjacency.set(device.id, []);
+    });
+
+    topology.connections.forEach((connection) => {
+      if (connection.status !== "up") {
+        return;
+      }
+
+      if (adjacency.has(connection.source_device_id)) {
+        adjacency
+          .get(connection.source_device_id)
+          .push(connection.target_device_id);
+      }
+
+      if (adjacency.has(connection.target_device_id)) {
+        adjacency
+          .get(connection.target_device_id)
+          .push(connection.source_device_id);
+      }
+    });
+
+    const onlineIds = new Set(
+      topology.devices
+        .filter((device) => device.status === "online")
+        .map((device) => device.id)
+    );
+
+    const hasRouter = topology.devices.some(
+      (device) => device.device_type === "router"
+    );
+
+    if (!hasRouter) {
+      return onlineIds;
+    }
+
+    const onlineRoutersIds = topology.devices
+      .filter(
+        (device) =>
+          device.device_type === "router" &&
+          device.status === "online"
+      )
+      .map((device) => device.id);
+
+    const visited = new Set();
+    const queue = [...onlineRoutersIds];
+
+    onlineRoutersIds.forEach((id) => visited.add(id));
+
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+
+      (adjacency.get(currentId) || []).forEach((neighborId) => {
+        if (visited.has(neighborId)) {
+          return;
+        }
+
+        if (!onlineIds.has(neighborId)) {
+          return;
+        }
+
+        visited.add(neighborId);
+        queue.push(neighborId);
+      });
+    }
+
+    return visited;
+  }, [topology]);
+
   const positionById = useMemo(() => {
     if (!topology) {
       return new Map();
@@ -551,11 +627,20 @@ function App() {
       return [];
     }
 
+    const hasRouterInTopology = topology.devices.some(
+      (d) => d.device_type === "router"
+    );
+
     return topology.devices.map((device) => {
       const position = positionById.get(device.id) || {
         x: 100,
         y: 100,
       };
+
+      const isUnreachable =
+        device.status === "online" &&
+        hasRouterInTopology &&
+        !reachableIds.has(device.id);
 
       let icon = "💻";
 
@@ -635,8 +720,13 @@ function App() {
 
               <span>{device.ip_address}</span>
 
-              <span className={"device-status " + device.status}>
-                {device.status}
+              <span
+                className={
+                  "device-status " +
+                  (isUnreachable ? "unreachable" : device.status)
+                }
+              >
+                {isUnreachable ? "unreachable" : device.status}
               </span>
             </div>
           ),
@@ -646,26 +736,29 @@ function App() {
           minWidth: "180px",
           padding: "0",
           borderRadius: "14px",
-          border:
-            device.status === "online"
+          border: isUnreachable
+            ? "2px dashed #94a3b8"
+            : device.status === "online"
               ? "2px solid #22c55e"
               : "2px solid #ef4444",
 
-          background:
-            device.status === "online"
+          background: isUnreachable
+            ? "#1e293b"
+            : device.status === "online"
               ? "#0f2418"
               : "#2a1515",
 
           color: "#ffffff",
 
-          boxShadow:
-            device.status === "online"
+          boxShadow: isUnreachable
+            ? "0 0 15px rgba(148,163,184,0.15)"
+            : device.status === "online"
               ? "0 0 20px rgba(34,197,94,0.15)"
               : "0 0 20px rgba(239,68,68,0.12)",
         },
       };
     });
-  }, [topology, positionById]);
+  }, [topology, positionById, reachableIds]);
 
   const edges = useMemo(() => {
     if (!topology) {
