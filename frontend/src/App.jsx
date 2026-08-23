@@ -190,6 +190,7 @@ function App() {
       alert(err.message || "Failed to delete device.");
     }
   };
+
   const handleEditInputChange = (event) => {
     const { name, value } = event.target;
 
@@ -416,6 +417,7 @@ function App() {
       clearInterval(interval);
     };
   }, []);
+
   const structureKey = useMemo(() => {
     if (!topology) {
       return "";
