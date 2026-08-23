@@ -1,13 +1,14 @@
 import { useState } from "react";
 
 function Auth({ apiUrl, onAuthSuccess }) {
-    const [mode, setMode] = useState("login");
+    const [mode, setMode] = useState("login"); // "login" | "register" | "verify"
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState(null);
     const [toast, setToast] = useState(null);
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [code, setCode] = useState("");
 
     const showToast = (text, type = "success") => {
         setToast({ text, type });
@@ -83,18 +84,85 @@ function Auth({ apiUrl, onAuthSuccess }) {
                 throw new Error(data?.detail || "Registration failed");
             }
 
-            showToast("Account created successfully! Welcome aboard 🎉", "success");
-
-            localStorage.setItem("token", data.access_token);
-
-            setTimeout(() => {
-                onAuthSuccess(data.access_token);
-            }, 1200);
+            showToast("Verification code sent to your email 📧", "success");
+            setMode("verify");
         } catch (err) {
             setMessage({
                 type: "error",
                 text: err.message || "Registration failed. Please try again.",
             });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifySubmit = async (event) => {
+        event.preventDefault();
+
+        setLoading(true);
+        setMessage(null);
+
+        try {
+            const response = await fetch(`${apiUrl}/verify-email`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    email: email,
+                    code: code,
+                }),
+            });
+
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(data?.detail || "Verification failed");
+            }
+
+            showToast("Account verified! Welcome aboard 🎉", "success");
+
+            localStorage.setItem("token", data.access_token);
+
+            setTimeout(() => {
+                onAuthSuccess(data.access_token);
+            }, 900);
+        } catch (err) {
+            setMessage({
+                type: "error",
+                text: err.message || "Invalid or expired code.",
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResendCode = async () => {
+        setLoading(true);
+        setMessage(null);
+
+        try {
+            const response = await fetch(`${apiUrl}/resend-verification-code`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email: email }),
+            });
+
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(data?.detail || "Failed to resend code");
+            }
+
+            showToast("A new code has been sent 📧", "success");
+        } catch (err) {
+            setMessage({
+                type: "error",
+                text: err.message || "Failed to resend code.",
+            });
+        } finally {
             setLoading(false);
         }
     };
@@ -144,23 +212,25 @@ function Auth({ apiUrl, onAuthSuccess }) {
                     <p>Real-time network topology monitoring</p>
                 </div>
 
-                <div className="net-auth-toggle">
-                    <button
-                        className={mode === "login" ? "active" : ""}
-                        onClick={() => switchMode("login")}
-                        type="button"
-                    >
-                        Sign In
-                    </button>
+                {mode !== "verify" && (
+                    <div className="net-auth-toggle">
+                        <button
+                            className={mode === "login" ? "active" : ""}
+                            onClick={() => switchMode("login")}
+                            type="button"
+                        >
+                            Sign In
+                        </button>
 
-                    <button
-                        className={mode === "register" ? "active" : ""}
-                        onClick={() => switchMode("register")}
-                        type="button"
-                    >
-                        Create Account
-                    </button>
-                </div>
+                        <button
+                            className={mode === "register" ? "active" : ""}
+                            onClick={() => switchMode("register")}
+                            type="button"
+                        >
+                            Create Account
+                        </button>
+                    </div>
+                )}
 
                 {message && (
                     <div className={`net-auth-message ${message.type}`}>
@@ -168,7 +238,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
                     </div>
                 )}
 
-                {mode === "login" ? (
+                {mode === "login" && (
                     <form onSubmit={handleLoginSubmit} className="net-auth-form">
                         <label>
                             Email
@@ -196,7 +266,9 @@ function Auth({ apiUrl, onAuthSuccess }) {
                             {loading ? "Signing in..." : "Sign In"}
                         </button>
                     </form>
-                ) : (
+                )}
+
+                {mode === "register" && (
                     <form onSubmit={handleRegisterSubmit} className="net-auth-form">
                         <label>
                             Email
@@ -223,6 +295,40 @@ function Auth({ apiUrl, onAuthSuccess }) {
 
                         <button type="submit" className="net-auth-submit" disabled={loading}>
                             {loading ? "Creating account..." : "Create Account"}
+                        </button>
+                    </form>
+                )}
+
+                {mode === "verify" && (
+                    <form onSubmit={handleVerifySubmit} className="net-auth-form">
+                        <p className="net-auth-hint">
+                            We sent a 6-digit code to <strong>{email}</strong>. Enter it below to activate your account.
+                        </p>
+
+                        <label>
+                            Verification Code
+                            <input
+                                type="text"
+                                value={code}
+                                onChange={(event) => setCode(event.target.value)}
+                                placeholder="123456"
+                                maxLength={6}
+                                required
+                                className="net-auth-code-input"
+                            />
+                        </label>
+
+                        <button type="submit" className="net-auth-submit" disabled={loading}>
+                            {loading ? "Verifying..." : "Verify Account"}
+                        </button>
+
+                        <button
+                            type="button"
+                            className="net-auth-resend"
+                            onClick={handleResendCode}
+                            disabled={loading}
+                        >
+                            Didn't get a code? Resend
                         </button>
                     </form>
                 )}

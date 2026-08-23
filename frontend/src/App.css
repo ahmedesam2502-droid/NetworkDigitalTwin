@@ -830,3 +830,32 @@ button {
     padding: 18px;
   }
 }
+
+.net-auth-hint {
+  font-size: 13px;
+  color: #94a3b8;
+  margin: 0 0 4px;
+  line-height: 1.5;
+}
+
+.net-auth-code-input {
+  text-align: center;
+  font-size: 22px;
+  letter-spacing: 8px;
+  font-weight: 700;
+}
+
+.net-auth-resend {
+  background: none;
+  border: none;
+  color: #38bdf8;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 4px;
+  text-decoration: underline;
+}
+
+.net-auth-resend:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -13,6 +13,9 @@ from .auth import (
     create_access_token,
     decode_access_token,
 )
+from .email_service import send_verification_email
+import random
+from datetime import datetime, timedelta, timezone
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -64,6 +67,13 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+class VerifyEmailRequest(BaseModel):
+    email: str
+    code: str
+
+
+class ResendCodeRequest(BaseModel):
+    email: str
 
 def get_db():
     db = SessionLocal()
@@ -140,7 +150,7 @@ def database_test():
 # Authentication
 # =========================
 
-@app.post("/register", response_model=Token)
+@app.post("/register")
 @limiter.limit("5/minute")
 def register(
     request: Request,
@@ -173,13 +183,82 @@ def register(
             detail="Password must be at least 8 characters long"
         )
 
+    code = str(random.randint(100000, 999999))
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
     user = User(
         username=user_data.username,
         email=user_data.email,
-        hashed_password=hash_password(user_data.password)
+        hashed_password=hash_password(user_data.password),
+        is_verified=False,
+        verification_code=code,
+        verification_code_expires_at=expires_at,
     )
 
     db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    try:
+        send_verification_email(user.email, code)
+    except Exception as email_error:
+        db.delete(user)
+        db.commit()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send verification email: {str(email_error)}"
+        )
+
+    return {
+        "message": "Registration successful. Please check your email for a verification code.",
+        "email": user.email,
+    }
+
+@app.post("/verify-email", response_model=Token)
+@limiter.limit("10/minute")
+def verify_email(
+    request: Request,
+    verify_data: VerifyEmailRequest,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.email == verify_data.email
+    ).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No account found with this email"
+        )
+
+    if user.is_verified:
+        raise HTTPException(
+            status_code=400,
+            detail="This account is already verified"
+        )
+
+    if user.verification_code != verify_data.code:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid verification code"
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = user.verification_code_expires_at
+
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at is None or now > expires_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Verification code has expired. Please request a new one."
+        )
+
+    user.is_verified = True
+    user.verification_code = None
+    user.verification_code_expires_at = None
+
     db.commit()
     db.refresh(user)
 
@@ -189,6 +268,47 @@ def register(
 
     return Token(access_token=access_token)
 
+
+@app.post("/resend-verification-code")
+@limiter.limit("3/minute")
+def resend_verification_code(
+    request: Request,
+    resend_data: ResendCodeRequest,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.email == resend_data.email
+    ).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No account found with this email"
+        )
+
+    if user.is_verified:
+        raise HTTPException(
+            status_code=400,
+            detail="This account is already verified"
+        )
+
+    code = str(random.randint(100000, 999999))
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    user.verification_code = code
+    user.verification_code_expires_at = expires_at
+
+    db.commit()
+
+    try:
+        send_verification_email(user.email, code)
+    except Exception as email_error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send verification email: {str(email_error)}"
+        )
+
+    return {"message": "A new verification code has been sent to your email."}
 
 @app.post("/login", response_model=Token)
 @limiter.limit("5/minute")
@@ -207,6 +327,12 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password"
+        )
+
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before logging in"
         )
 
     access_token = create_access_token(
