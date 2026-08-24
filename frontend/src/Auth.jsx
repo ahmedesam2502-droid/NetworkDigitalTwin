@@ -6,6 +6,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
     const [message, setMessage] = useState(null);
     const [toast, setToast] = useState(null);
 
+    const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [code, setCode] = useState("");
@@ -74,6 +75,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
                 body: JSON.stringify({
                     username: email,
                     email: email,
+                    full_name: fullName,
                     password: password,
                 }),
             });
@@ -270,6 +272,17 @@ function Auth({ apiUrl, onAuthSuccess }) {
 
                 {mode === "register" && (
                     <form onSubmit={handleRegisterSubmit} className="net-auth-form">
+                        <label>
+                            Full Name
+                            <input
+                                type="text"
+                                value={fullName}
+                                onChange={(event) => setFullName(event.target.value)}
+                                placeholder="Ahmed Essam"
+                                required
+                            />
+                        </label>
+
                         <label>
                             Email
                             <input

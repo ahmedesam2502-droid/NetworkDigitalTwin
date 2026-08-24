@@ -55,6 +55,7 @@ Base.metadata.create_all(bind=engine)
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
+    full_name: str
     password: str
 
 
@@ -183,18 +184,24 @@ def register(
             detail="Password must be at least 8 characters long"
         )
 
+    if not user_data.full_name.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Full name cannot be empty"
+        )
+
     code = str(random.randint(100000, 999999))
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
 
     user = User(
         username=user_data.username,
         email=user_data.email,
+        full_name=user_data.full_name,
         hashed_password=hash_password(user_data.password),
         is_verified=False,
         verification_code=code,
         verification_code_expires_at=expires_at,
     )
-
     db.add(user)
     db.commit()
     db.refresh(user)
