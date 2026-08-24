@@ -1,34 +1,18 @@
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
 
-SMTP_SERVER = os.getenv("BREVO_SMTP_SERVER")
-SMTP_PORT = int(os.getenv("BREVO_SMTP_PORT", "587"))
-SMTP_LOGIN = os.getenv("BREVO_SMTP_LOGIN")
-SMTP_KEY = os.getenv("BREVO_SMTP_KEY")
-
-SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL", os.getenv("BREVO_SMTP_LOGIN"))
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL")
 SENDER_NAME = "Network Digital Twin"
+
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 def send_verification_email(to_email: str, code: str) -> None:
-    if not all([SMTP_SERVER, SMTP_PORT, SMTP_LOGIN, SMTP_KEY]):
+    if not BREVO_API_KEY or not SENDER_EMAIL:
         raise RuntimeError(
             "Email service is not configured. Check your .env file."
         )
-
-    message = MIMEMultipart("alternative")
-    message["Subject"] = "Verify your Network Digital Twin account"
-    message["From"] = f"{SENDER_NAME} <{SENDER_EMAIL}>"
-    message["To"] = to_email
-
-    text_body = (
-        f"Welcome to Network Digital Twin!\n\n"
-        f"Your verification code is: {code}\n\n"
-        f"Enter this code in the app to activate your account.\n"
-        f"This code expires in 15 minutes."
-    )
 
     html_body = f"""
     <div style="font-family: Arial, sans-serif; background: #07111f; padding: 32px; color: #e5e7eb;">
@@ -43,14 +27,27 @@ def send_verification_email(to_email: str, code: str) -> None:
     </div>
     """
 
-    message.attach(MIMEText(text_body, "plain"))
-    message.attach(MIMEText(html_body, "html"))
-    if SMTP_PORT == 465:
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-            server.login(SMTP_LOGIN, SMTP_KEY)
-            server.sendmail(SENDER_EMAIL, to_email, message.as_string())
-    else:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_LOGIN, SMTP_KEY)
-            server.sendmail(SENDER_EMAIL, to_email, message.as_string())
+    payload = {
+        "sender": {"name": SENDER_NAME, "email": SENDER_EMAIL},
+        "to": [{"email": to_email}],
+        "subject": "Verify your Network Digital Twin account",
+        "htmlContent": html_body,
+    }
+
+    headers = {
+        "accept": "application/json",
+        "api-key": BREVO_API_KEY,
+        "content-type": "application/json",
+    }
+
+    response = requests.post(
+        BREVO_API_URL,
+        json=payload,
+        headers=headers,
+        timeout=10,
+    )
+
+    if response.status_code not in (200, 201):
+        raise RuntimeError(
+            f"Brevo API error ({response.status_code}): {response.text}"
+        )
