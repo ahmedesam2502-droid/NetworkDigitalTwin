@@ -890,6 +890,8 @@ button {
 .header h1 {
   font-family: "JetBrains Mono", Consolas, monospace;
   letter-spacing: -0.5px;
+  font-size: 24px;
+  white-space: nowrap;
 }
 
 .header h1::before {
