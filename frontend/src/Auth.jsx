@@ -11,6 +11,8 @@ function Auth({ apiUrl, onAuthSuccess }) {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [code, setCode] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [showNewPassword, setShowNewPassword] = useState(false);
 
     const showToast = (text, type = "success") => {
         setToast({ text, type });
@@ -215,6 +217,88 @@ function Auth({ apiUrl, onAuthSuccess }) {
             setLoading(false);
         }
     };
+    const handleForgotPasswordSubmit = async (event) => {
+        event.preventDefault();
+
+        setLoading(true);
+        setMessage(null);
+
+        try {
+            const response = await fetch(`${apiUrl}/forgot-password`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email: email }),
+            });
+
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(data?.detail || "Failed to send reset code");
+            }
+
+            showToast("If this email exists, a reset code was sent 📧", "success");
+            setMode("reset");
+        } catch (err) {
+            setMessage({
+                type: "error",
+                text: err.message || "Failed to send reset code.",
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResetPasswordSubmit = async (event) => {
+        event.preventDefault();
+
+        setLoading(true);
+        setMessage(null);
+
+        const passwordError = validatePasswordStrength(newPassword);
+
+        if (passwordError) {
+            setMessage({ type: "error", text: passwordError });
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const response = await fetch(`${apiUrl}/reset-password`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    email: email,
+                    code: code,
+                    new_password: newPassword,
+                }),
+            });
+
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                throw new Error(data?.detail || "Failed to reset password");
+            }
+
+            showToast("Password reset successful! Signing you in...", "success");
+
+            localStorage.setItem("token", data.access_token);
+
+            setTimeout(() => {
+                onAuthSuccess(data.access_token);
+            }, 900);
+        } catch (err) {
+            setMessage({
+                type: "error",
+                text: err.message || "Invalid or expired code.",
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div className="net-auth-page">
@@ -261,7 +345,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
                     <p>Real-time network topology monitoring</p>
                 </div>
 
-                {mode !== "verify" && (
+                {mode !== "verify" && mode !== "forgot" && mode !== "reset" && (
                     <div className="net-auth-toggle">
                         <button
                             className={mode === "login" ? "active" : ""}
@@ -323,6 +407,14 @@ function Auth({ apiUrl, onAuthSuccess }) {
 
                         <button type="submit" className="net-auth-submit" disabled={loading}>
                             {loading ? "Signing in..." : "Sign In"}
+                        </button>
+
+                        <button
+                            type="button"
+                            className="net-auth-resend"
+                            onClick={() => switchMode("forgot")}
+                        >
+                            Forgot password?
                         </button>
                     </form>
                 )}
@@ -436,11 +528,96 @@ function Auth({ apiUrl, onAuthSuccess }) {
                         <button type="submit" className="net-auth-submit" disabled={loading}>
                             {loading ? "Verifying..." : "Verify Account"}
                         </button>
-
                         <button
                             type="button"
                             className="net-auth-resend"
                             onClick={handleResendCode}
+                            disabled={loading}
+                        >
+                            Didn't get a code? Resend
+                        </button>
+                    </form>
+                )}
+
+                {mode === "forgot" && (
+                    <form onSubmit={handleForgotPasswordSubmit} className="net-auth-form">
+                        <p className="net-auth-hint">
+                            Enter your email and we'll send you a code to reset your password.
+                        </p>
+
+                        <label>
+                            Email
+                            <input
+                                type="email"
+                                value={email}
+                                onChange={(event) => setEmail(event.target.value)}
+                                placeholder="you@example.com"
+                                required
+                            />
+                        </label>
+
+                        <button type="submit" className="net-auth-submit" disabled={loading}>
+                            {loading ? "Sending..." : "Send Reset Code"}
+                        </button>
+
+                        <button
+                            type="button"
+                            className="net-auth-resend"
+                            onClick={() => switchMode("login")}
+                        >
+                            Back to Sign In
+                        </button>
+                    </form>
+                )}
+
+                {mode === "reset" && (
+                    <form onSubmit={handleResetPasswordSubmit} className="net-auth-form">
+                        <p className="net-auth-hint">
+                            Enter the code sent to <strong>{email}</strong> and choose a new password.
+                        </p>
+
+                        <label>
+                            Reset Code
+                            <input
+                                type="text"
+                                value={code}
+                                onChange={(event) => setCode(event.target.value)}
+                                placeholder="123456"
+                                maxLength={6}
+                                required
+                                className="net-auth-code-input"
+                            />
+                        </label>
+
+                        <label>
+                            New Password
+                            <div className="net-auth-password-wrapper">
+                                <input
+                                    type={showNewPassword ? "text" : "password"}
+                                    value={newPassword}
+                                    onChange={(event) => setNewPassword(event.target.value)}
+                                    placeholder="Letters, numbers & symbols"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    className="net-auth-eye-button"
+                                    onClick={() => setShowNewPassword((prev) => !prev)}
+                                    tabIndex={-1}
+                                >
+                                    {showNewPassword ? "🙈" : "👁"}
+                                </button>
+                            </div>
+                        </label>
+
+                        <button type="submit" className="net-auth-submit" disabled={loading}>
+                            {loading ? "Resetting..." : "Reset Password"}
+                        </button>
+
+                        <button
+                            type="button"
+                            className="net-auth-resend"
+                            onClick={handleForgotPasswordSubmit}
                             disabled={loading}
                         >
                             Didn't get a code? Resend
@@ -453,5 +630,4 @@ function Auth({ apiUrl, onAuthSuccess }) {
         </div>
     );
 }
-
 export default Auth;

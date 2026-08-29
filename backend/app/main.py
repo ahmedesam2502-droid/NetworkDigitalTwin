@@ -81,6 +81,15 @@ class VerifyEmailRequest(BaseModel):
 class ResendCodeRequest(BaseModel):
     email: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+    
 
 def get_db():
     db = SessionLocal()
@@ -347,6 +356,87 @@ def resend_verification_code(
 
     return {"message": "A new verification code has been sent to your email."}
 
+@app.post("/forgot-password")
+@limiter.limit("3/minute")
+def forgot_password(
+    request: Request,
+    forgot_data: ForgotPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.email == forgot_data.email
+    ).first()
+
+    # Always return success, even if the email doesn't exist,
+    # to avoid leaking which emails are registered.
+    if user is None:
+        return {"message": "If this email exists, a reset code has been sent."}
+
+    code = str(random.randint(100000, 999999))
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+
+    user.verification_code = code
+    user.verification_code_expires_at = expires_at
+
+    db.commit()
+
+    try:
+        send_verification_email(user.email, code)
+    except Exception:
+        pass
+
+    return {"message": "If this email exists, a reset code has been sent."}
+
+
+@app.post("/reset-password", response_model=Token)
+@limiter.limit("5/minute")
+def reset_password(
+    request: Request,
+    reset_data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.email == reset_data.email
+    ).first()
+
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No account found with this email"
+        )
+
+    if user.verification_code != reset_data.code:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid reset code"
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = user.verification_code_expires_at
+
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at is None or now > expires_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Reset code has expired. Please request a new one."
+        )
+
+    validate_password_strength(reset_data.new_password)
+
+    user.hashed_password = hash_password(reset_data.new_password)
+    user.verification_code = None
+    user.verification_code_expires_at = None
+
+    db.commit()
+    db.refresh(user)
+
+    access_token = create_access_token(
+        data={"sub": user.username}
+    )
+
+    return Token(access_token=access_token)
 
 @app.post("/login", response_model=Token)
 @limiter.limit("5/minute")
