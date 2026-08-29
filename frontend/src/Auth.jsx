@@ -24,6 +24,22 @@ function Auth({ apiUrl, onAuthSuccess }) {
         setMessage(null);
     };
 
+    const validatePasswordStrength = (value) => {
+        if (value.length < 8) {
+            return "Password must be at least 8 characters long";
+        }
+        if (!/[A-Za-z]/.test(value)) {
+            return "Password must contain at least one letter";
+        }
+        if (!/[0-9]/.test(value)) {
+            return "Password must contain at least one number";
+        }
+        if (!/[^A-Za-z0-9]/.test(value)) {
+            return "Password must contain at least one special character (e.g. ! @ # $ %)";
+        }
+        return null;
+    };
+
     const handleLoginSubmit = async (event) => {
         event.preventDefault();
 
@@ -65,6 +81,14 @@ function Auth({ apiUrl, onAuthSuccess }) {
 
         setLoading(true);
         setMessage(null);
+
+        const passwordError = validatePasswordStrength(password);
+
+        if (passwordError) {
+            setMessage({ type: "error", text: passwordError });
+            setLoading(false);
+            return;
+        }
 
         try {
             const response = await fetch(`${apiUrl}/register`, {
@@ -278,7 +302,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
                                 type="text"
                                 value={fullName}
                                 onChange={(event) => setFullName(event.target.value)}
-                                placeholder="Ahmed Essam"
+                                placeholder="Enter your full name"
                                 required
                             />
                         </label>
@@ -300,10 +324,12 @@ function Auth({ apiUrl, onAuthSuccess }) {
                                 type="password"
                                 value={password}
                                 onChange={(event) => setPassword(event.target.value)}
-                                placeholder="At least 8 characters"
+                                placeholder="Letters, numbers & symbols"
                                 required
-                                minLength={8}
                             />
+                            <span className="net-auth-password-hint">
+                                At least 8 characters, with letters, numbers, and a symbol.
+                            </span>
                         </label>
 
                         <button type="submit" className="net-auth-submit" disabled={loading}>

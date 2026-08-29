@@ -1027,3 +1027,27 @@ button {
     0 18px 45px rgba(0, 0, 0, 0.2),
     0 0 40px rgba(37, 99, 235, 0.06);
 }
+
+.net-auth-form input {
+  font-size: 15px;
+  padding: 13px 14px;
+}
+
+.net-auth-form label {
+  font-size: 14px;
+}
+
+.net-auth-password-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.net-auth-brand h1 {
+  font-size: 22px;
+}
+
+.net-auth-brand p {
+  font-size: 14px;
+}

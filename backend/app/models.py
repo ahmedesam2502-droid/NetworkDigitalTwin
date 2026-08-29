@@ -13,7 +13,10 @@ class Device(Base):
         primary_key=True,
         index=True
     )
-
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False
+    )
     name: Mapped[str] = mapped_column(
         String(100),
         nullable=False
@@ -50,7 +53,10 @@ class Connection(Base):
         primary_key=True,
         index=True
     )
-
+    owner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False
+    )
     source_device_id: Mapped[int] = mapped_column(
         ForeignKey("devices.id"),
         nullable=False
@@ -92,10 +98,12 @@ class User(Base):
         unique=True,
         nullable=False
     )
+    
     full_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False
     )
+    
     hashed_password: Mapped[str] = mapped_column(
         String(255),
         nullable=False

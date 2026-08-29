@@ -18,6 +18,12 @@ function App() {
     () => localStorage.getItem("token")
   );
 
+  const [isReturningUser, setIsReturningUser] = useState(
+    () => localStorage.getItem("hasLoggedIn") === "true"
+  );
+
+  const [currentUser, setCurrentUser] = useState(null);
+
   const [topology, setTopology] = useState(null);
   const [error, setError] = useState("");
 
@@ -65,7 +71,11 @@ function App() {
 
   const loadTopology = async () => {
     try {
-      const response = await fetch(`${API_URL}/topology`);
+      const response = await fetch(`${API_URL}/topology`, {
+        headers: {
+          Authorization: "Bearer " + token,
+        },
+      });
 
       if (!response.ok) {
         throw new Error("Backend returned an error");
@@ -84,7 +94,12 @@ function App() {
   const loadStats = async () => {
     try {
       const response = await fetch(
-        `${API_URL}/dashboard/stats`
+        `${API_URL}/dashboard/stats`,
+        {
+          headers: {
+            Authorization: "Bearer " + token,
+          },
+        }
       );
 
       if (!response.ok) {
@@ -98,7 +113,24 @@ function App() {
       console.error("Stats error:", err);
     }
   };
+  const loadCurrentUser = async () => {
+    try {
+      const response = await fetch(`${API_URL}/me`, {
+        headers: {
+          Authorization: "Bearer " + token,
+        },
+      });
 
+      if (!response.ok) {
+        return;
+      }
+
+      const data = await response.json();
+      setCurrentUser(data);
+    } catch (err) {
+      console.error("Load user error:", err);
+    }
+  };
   const checkDevice = async (deviceId) => {
     try {
       const response = await fetch(
@@ -405,8 +437,13 @@ function App() {
   };
 
   useEffect(() => {
+    if (!token) {
+      return;
+    }
+
     loadTopology();
     loadStats();
+    loadCurrentUser();
 
     const interval = setInterval(() => {
       loadTopology();
@@ -416,7 +453,7 @@ function App() {
     return () => {
       clearInterval(interval);
     };
-  }, []);
+  }, [token]);
 
   const structureKey = useMemo(() => {
     if (!topology) {
@@ -806,7 +843,15 @@ function App() {
     return (
       <Auth
         apiUrl={API_URL}
-        onAuthSuccess={(newToken) => setToken(newToken)}
+        onAuthSuccess={(newToken) => {
+          const alreadyLoggedIn =
+            localStorage.getItem("hasLoggedIn") === "true";
+
+          setIsReturningUser(alreadyLoggedIn);
+
+          localStorage.setItem("hasLoggedIn", "true");
+          setToken(newToken);
+        }}
       />
     );
   }
@@ -852,7 +897,11 @@ function App() {
           </h1>
 
           <p>
-            Real-time network topology monitoring
+            {currentUser
+              ? isReturningUser
+                ? `Welcome back, ${currentUser.full_name} 👋`
+                : `Welcome, ${currentUser.full_name} 👋`
+              : "Real-time network topology monitoring"}
           </p>
         </div>
 

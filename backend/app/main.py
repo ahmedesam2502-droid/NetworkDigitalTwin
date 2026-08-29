@@ -1,9 +1,16 @@
+import re
+import random
+from datetime import datetime, timedelta, timezone
+
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from .database import Base, engine, SessionLocal
 from .models import Device, Connection, User
@@ -14,11 +21,7 @@ from .auth import (
     decode_access_token,
 )
 from .email_service import send_verification_email
-import random
-from datetime import datetime, timedelta, timezone
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+
 
 app = FastAPI(
     title="Network Digital Twin API",
@@ -28,6 +31,7 @@ app = FastAPI(
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # =========================
 # CORS
 # =========================
@@ -68,6 +72,7 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+
 class VerifyEmailRequest(BaseModel):
     email: str
     code: str
@@ -75,6 +80,7 @@ class VerifyEmailRequest(BaseModel):
 
 class ResendCodeRequest(BaseModel):
     email: str
+
 
 def get_db():
     db = SessionLocal()
@@ -118,6 +124,32 @@ def get_current_user(
     return user
 
 
+def validate_password_strength(password: str) -> None:
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters long"
+        )
+
+    if not re.search(r"[A-Za-z]", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one letter"
+        )
+
+    if not re.search(r"[0-9]", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one number"
+        )
+
+    if not re.search(r"[^A-Za-z0-9]", password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least one special character (e.g. ! @ # $ %)"
+        )
+
+
 # =========================
 # Basic Routes
 # =========================
@@ -139,9 +171,9 @@ def health():
 @app.get("/db-test")
 def database_test():
     with engine.connect() as connection:
-         result = connection.execute(text("SELECT 1"))
+        result = connection.execute(text("SELECT 1"))
 
-    return {
+        return {
             "database": "connected",
             "result": result.scalar()
         }
@@ -178,17 +210,13 @@ def register(
             detail="Email already registered"
         )
 
-    if len(user_data.password) < 8:
-        raise HTTPException(
-            status_code=400,
-            detail="Password must be at least 8 characters long"
-        )
-
     if not user_data.full_name.strip():
         raise HTTPException(
             status_code=400,
             detail="Full name cannot be empty"
         )
+
+    validate_password_strength(user_data.password)
 
     code = str(random.randint(100000, 999999))
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
@@ -202,6 +230,7 @@ def register(
         verification_code=code,
         verification_code_expires_at=expires_at,
     )
+
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -220,6 +249,7 @@ def register(
         "message": "Registration successful. Please check your email for a verification code.",
         "email": user.email,
     }
+
 
 @app.post("/verify-email", response_model=Token)
 @limiter.limit("10/minute")
@@ -317,6 +347,7 @@ def resend_verification_code(
 
     return {"message": "A new verification code has been sent to your email."}
 
+
 @app.post("/login", response_model=Token)
 @limiter.limit("5/minute")
 def login(
@@ -357,6 +388,7 @@ def get_me(
         "id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
+        "full_name": current_user.full_name,
     }
 
 
@@ -365,7 +397,9 @@ def get_me(
 # =========================
 
 @app.post("/devices")
+@limiter.limit("30/minute")
 def create_device(
+    request: Request,
     name: str,
     ip_address: str,
     device_type: str,
@@ -385,7 +419,8 @@ def create_device(
         )
 
     existing_device = db.query(Device).filter(
-        Device.ip_address == ip_address
+        Device.ip_address == ip_address,
+        Device.owner_id == current_user.id
     ).first()
 
     if existing_device is not None:
@@ -398,7 +433,8 @@ def create_device(
         name=name,
         ip_address=ip_address,
         device_type=device_type,
-        status="offline"
+        status="offline",
+        owner_id=current_user.id
     )
 
     db.add(device)
@@ -407,20 +443,26 @@ def create_device(
 
     return device
 
+
 @app.get("/devices")
 def get_devices(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    return db.query(Device).all()
+    return db.query(Device).filter(
+        Device.owner_id == current_user.id
+    ).order_by(Device.id).all()
 
 
 @app.get("/devices/{device_id}")
 def get_device(
     device_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     device = db.query(Device).filter(
-        Device.id == device_id
+        Device.id == device_id,
+        Device.owner_id == current_user.id
     ).first()
 
     if device is None:
@@ -445,7 +487,8 @@ def update_device(
     current_user: User = Depends(get_current_user)
 ):
     device = db.query(Device).filter(
-        Device.id == device_id
+        Device.id == device_id,
+        Device.owner_id == current_user.id
     ).first()
 
     if device is None:
@@ -474,7 +517,8 @@ def delete_device(
     current_user: User = Depends(get_current_user)
 ):
     device = db.query(Device).filter(
-        Device.id == device_id
+        Device.id == device_id,
+        Device.owner_id == current_user.id
     ).first()
 
     if device is None:
@@ -485,7 +529,8 @@ def delete_device(
 
     related_connections = db.query(Connection).filter(
         (Connection.source_device_id == device_id) |
-        (Connection.target_device_id == device_id)
+        (Connection.target_device_id == device_id),
+        Connection.owner_id == current_user.id
     ).all()
 
     deleted_connections_count = len(related_connections)
@@ -516,7 +561,8 @@ def check_device(
     current_user: User = Depends(get_current_user)
 ):
     device = db.query(Device).filter(
-        Device.id == device_id
+        Device.id == device_id,
+        Device.owner_id == current_user.id
     ).first()
 
     if not device:
@@ -554,19 +600,87 @@ def check_device(
         "status": device.status,
         "reachable": reachable
     }
-'''
-        if result.returncode == 0:
-            device.status = "online"
-        else:
+
+
+@app.post("/devices/check-all")
+@limiter.limit("10/minute")
+def check_all_devices(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    import subprocess
+
+    devices = db.query(Device).filter(
+        Device.owner_id == current_user.id
+    ).all()
+
+    for device in devices:
+        try:
+            result = subprocess.run(
+                ["ping", "-n", "1", "-w", "1000", device.ip_address],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+
+            if result.returncode == 0:
+                device.status = "online"
+            else:
+                device.status = "offline"
+
+        except Exception:
             device.status = "offline"
-    except Exception:
-        device.status = "offline"
+
+    db.commit()
+
+    return {
+        "message": "All devices checked successfully",
+        "devices": [
+            {
+                "id": device.id,
+                "name": device.name,
+                "ip_address": device.ip_address,
+                "status": device.status,
+            }
+            for device in devices
+        ],
+    }
+
+
+@app.post("/devices/{device_id}/simulate")
+@limiter.limit("30/minute")
+def simulate_device(
+    request: Request,
+    device_id: int,
+    status: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    device = db.query(Device).filter(
+        Device.id == device_id,
+        Device.owner_id == current_user.id
+    ).first()
+
+    if device is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Device not found"
+        )
+
+    if status not in ["online", "offline"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Status must be online or offline"
+        )
+
+    device.status = status
 
     db.commit()
     db.refresh(device)
 
     return device
-   '''
+
 
 # =========================
 # Connections
@@ -583,11 +697,13 @@ def create_connection(
     current_user: User = Depends(get_current_user)
 ):
     source_device = db.query(Device).filter(
-        Device.id == source_device_id
+        Device.id == source_device_id,
+        Device.owner_id == current_user.id
     ).first()
 
     target_device = db.query(Device).filter(
-        Device.id == target_device_id
+        Device.id == target_device_id,
+        Device.owner_id == current_user.id
     ).first()
 
     if source_device is None:
@@ -612,7 +728,8 @@ def create_connection(
         source_device_id=source_device_id,
         target_device_id=target_device_id,
         connection_type=connection_type,
-        status="up"
+        status="up",
+        owner_id=current_user.id
     )
 
     db.add(connection)
@@ -624,9 +741,12 @@ def create_connection(
 
 @app.get("/connections")
 def get_connections(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    return db.query(Connection).all()
+    return db.query(Connection).filter(
+        Connection.owner_id == current_user.id
+    ).order_by(Connection.id).all()
 
 
 @app.delete("/connections/{connection_id}")
@@ -638,7 +758,8 @@ def delete_connection(
     current_user: User = Depends(get_current_user)
 ):
     connection = db.query(Connection).filter(
-        Connection.id == connection_id
+        Connection.id == connection_id,
+        Connection.owner_id == current_user.id
     ).first()
 
     if connection is None:
@@ -655,16 +776,23 @@ def delete_connection(
         "connection_id": connection_id
     }
 
+
 # =========================
 # Network Topology
 # =========================
 
 @app.get("/topology")
 def get_topology(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    devices = db.query(Device).order_by(Device.id).all()
-    connections = db.query(Connection).order_by(Connection.id).all()
+    devices = db.query(Device).filter(
+        Device.owner_id == current_user.id
+    ).order_by(Device.id).all()
+
+    connections = db.query(Connection).filter(
+        Connection.owner_id == current_user.id
+    ).order_by(Connection.id).all()
 
     return {
         "devices": [
@@ -696,10 +824,16 @@ def get_topology(
 
 @app.get("/dashboard/stats")
 def get_dashboard_stats(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    devices = db.query(Device).all()
-    connections = db.query(Connection).all()
+    devices = db.query(Device).filter(
+        Device.owner_id == current_user.id
+    ).all()
+
+    connections = db.query(Connection).filter(
+        Connection.owner_id == current_user.id
+    ).all()
 
     online_devices = sum(
         1
@@ -733,76 +867,3 @@ def get_dashboard_stats(
         "active_connections": active_connections,
         "down_connections": down_connections
     }
-@app.post("/devices/check-all")
-@limiter.limit("10/minute")
-def check_all_devices(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    import subprocess
-
-    devices = db.query(Device).all()
-
-    for device in devices:
-        try:
-            result = subprocess.run(
-                ["ping", "-n", "1", "-w", "1000", device.ip_address],
-                capture_output=True,
-                text=True,
-                timeout=3,
-            )
-
-            if result.returncode == 0:
-                device.status = "online"
-            else:
-                device.status = "offline"
-
-        except Exception:
-            device.status = "offline"
-
-    db.commit()
-
-    return {
-        "message": "All devices checked successfully",
-        "devices": [
-            {
-                "id": device.id,
-                "name": device.name,
-                "ip_address": device.ip_address,
-                "status": device.status,
-            }
-            for device in devices
-        ],
-    }
-@app.post("/devices/{device_id}/simulate")
-@limiter.limit("30/minute")
-def simulate_device(
-    request: Request,
-    device_id: int,
-    status: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):  
-    device = db.query(Device).filter(
-        Device.id == device_id
-    ).first()
-
-    if device is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Device not found"
-        )
-
-    if status not in ["online", "offline"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Status must be online or offline"
-        )
-
-    device.status = status
-
-    db.commit()
-    db.refresh(device)
-
-    return device
