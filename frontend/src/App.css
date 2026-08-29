@@ -1051,3 +1051,64 @@ button {
 .net-auth-brand p {
   font-size: 14px;
 }
+
+.net-auth-password-wrapper {
+  position: relative;
+  display: flex;
+}
+
+.net-auth-password-wrapper input {
+  width: 100%;
+  padding-right: 40px;
+}
+
+.net-auth-eye-button {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+}
+
+.net-auth-strength {
+  margin-top: -6px;
+}
+
+.net-auth-strength-bar-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 3px;
+  background: #1e293b;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.net-auth-strength-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.25s ease, background 0.25s ease;
+}
+
+.net-auth-strength-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.net-auth-checklist {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.net-auth-checklist li.met {
+  color: #22c55e;
+}

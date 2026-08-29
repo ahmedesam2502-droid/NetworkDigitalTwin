@@ -5,6 +5,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState(null);
     const [toast, setToast] = useState(null);
+    const [showPassword, setShowPassword] = useState(false);
 
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
@@ -22,6 +23,28 @@ function Auth({ apiUrl, onAuthSuccess }) {
     const switchMode = (newMode) => {
         setMode(newMode);
         setMessage(null);
+    };
+
+    const passwordChecks = {
+        length: password.length >= 8,
+        letter: /[A-Za-z]/.test(password),
+        number: /[0-9]/.test(password),
+        special: /[^A-Za-z0-9]/.test(password),
+    };
+
+    const passwordScore = Object.values(passwordChecks).filter(Boolean).length;
+
+    const passwordStrengthLabel = () => {
+        if (password.length === 0) return "";
+        if (passwordScore <= 1) return "Weak";
+        if (passwordScore <= 3) return "Medium";
+        return "Strong";
+    };
+
+    const passwordStrengthColor = () => {
+        if (passwordScore <= 1) return "#ef4444";
+        if (passwordScore <= 3) return "#f59e0b";
+        return "#22c55e";
     };
 
     const validatePasswordStrength = (value) => {
@@ -279,13 +302,23 @@ function Auth({ apiUrl, onAuthSuccess }) {
 
                         <label>
                             Password
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(event) => setPassword(event.target.value)}
-                                placeholder="••••••••"
-                                required
-                            />
+                            <div className="net-auth-password-wrapper">
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    value={password}
+                                    onChange={(event) => setPassword(event.target.value)}
+                                    placeholder="••••••••"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    className="net-auth-eye-button"
+                                    onClick={() => setShowPassword((prev) => !prev)}
+                                    tabIndex={-1}
+                                >
+                                    {showPassword ? "🙈" : "👁"}
+                                </button>
+                            </div>
                         </label>
 
                         <button type="submit" className="net-auth-submit" disabled={loading}>
@@ -320,17 +353,60 @@ function Auth({ apiUrl, onAuthSuccess }) {
 
                         <label>
                             Password
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(event) => setPassword(event.target.value)}
-                                placeholder="Letters, numbers & symbols"
-                                required
-                            />
-                            <span className="net-auth-password-hint">
-                                At least 8 characters, with letters, numbers, and a symbol.
-                            </span>
+                            <div className="net-auth-password-wrapper">
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    value={password}
+                                    onChange={(event) => setPassword(event.target.value)}
+                                    placeholder="Letters, numbers & symbols"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    className="net-auth-eye-button"
+                                    onClick={() => setShowPassword((prev) => !prev)}
+                                    tabIndex={-1}
+                                >
+                                    {showPassword ? "🙈" : "👁"}
+                                </button>
+                            </div>
                         </label>
+
+                        {password.length > 0 && (
+                            <div className="net-auth-strength">
+                                <div className="net-auth-strength-bar-track">
+                                    <div
+                                        className="net-auth-strength-bar-fill"
+                                        style={{
+                                            width: `${(passwordScore / 4) * 100}%`,
+                                            background: passwordStrengthColor(),
+                                        }}
+                                    />
+                                </div>
+
+                                <span
+                                    className="net-auth-strength-label"
+                                    style={{ color: passwordStrengthColor() }}
+                                >
+                                    {passwordStrengthLabel()}
+                                </span>
+
+                                <ul className="net-auth-checklist">
+                                    <li className={passwordChecks.length ? "met" : ""}>
+                                        {passwordChecks.length ? "✓" : "○"} 8+ characters
+                                    </li>
+                                    <li className={passwordChecks.letter ? "met" : ""}>
+                                        {passwordChecks.letter ? "✓" : "○"} Letter
+                                    </li>
+                                    <li className={passwordChecks.number ? "met" : ""}>
+                                        {passwordChecks.number ? "✓" : "○"} Number
+                                    </li>
+                                    <li className={passwordChecks.special ? "met" : ""}>
+                                        {passwordChecks.special ? "✓" : "○"} Special character
+                                    </li>
+                                </ul>
+                            </div>
+                        )}
 
                         <button type="submit" className="net-auth-submit" disabled={loading}>
                             {loading ? "Creating account..." : "Create Account"}
