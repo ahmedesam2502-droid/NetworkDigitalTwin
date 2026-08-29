@@ -1,25 +1,27 @@
 import { useState } from "react";
 
 function Auth({ apiUrl, onAuthSuccess }) {
-    const [mode, setMode] = useState("login"); // "login" | "register" | "verify"
+    // modes: login | register | verify | forgot | reset-code | reset-password
+    const [mode, setMode] = useState("login");
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState(null);
     const [toast, setToast] = useState(null);
+
     const [showPassword, setShowPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
 
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
     const [code, setCode] = useState("");
+    const [resetCode, setResetCode] = useState("");
     const [newPassword, setNewPassword] = useState("");
-    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [confirmNewPassword, setConfirmNewPassword] = useState("");
 
     const showToast = (text, type = "success") => {
         setToast({ text, type });
-
-        setTimeout(() => {
-            setToast(null);
-        }, 3000);
+        setTimeout(() => setToast(null), 3000);
     };
 
     const switchMode = (newMode) => {
@@ -27,60 +29,87 @@ function Auth({ apiUrl, onAuthSuccess }) {
         setMessage(null);
     };
 
-    const passwordChecks = {
-        length: password.length >= 8,
-        letter: /[A-Za-z]/.test(password),
-        number: /[0-9]/.test(password),
-        special: /[^A-Za-z0-9]/.test(password),
-    };
+    const passwordChecks = (value) => ({
+        length: value.length >= 8,
+        letter: /[A-Za-z]/.test(value),
+        number: /[0-9]/.test(value),
+        special: /[^A-Za-z0-9]/.test(value),
+    });
 
-    const passwordScore = Object.values(passwordChecks).filter(Boolean).length;
+    const passwordScore = (value) =>
+        Object.values(passwordChecks(value)).filter(Boolean).length;
 
-    const passwordStrengthLabel = () => {
-        if (password.length === 0) return "";
-        if (passwordScore <= 1) return "Weak";
-        if (passwordScore <= 3) return "Medium";
+    const passwordStrengthLabel = (value) => {
+        if (value.length === 0) return "";
+        const score = passwordScore(value);
+        if (score <= 1) return "Weak";
+        if (score <= 3) return "Medium";
         return "Strong";
     };
 
-    const passwordStrengthColor = () => {
-        if (passwordScore <= 1) return "#ef4444";
-        if (passwordScore <= 3) return "#f59e0b";
+    const passwordStrengthColor = (value) => {
+        const score = passwordScore(value);
+        if (score <= 1) return "#ef4444";
+        if (score <= 3) return "#f59e0b";
         return "#22c55e";
     };
 
     const validatePasswordStrength = (value) => {
-        if (value.length < 8) {
-            return "Password must be at least 8 characters long";
-        }
-        if (!/[A-Za-z]/.test(value)) {
-            return "Password must contain at least one letter";
-        }
-        if (!/[0-9]/.test(value)) {
-            return "Password must contain at least one number";
-        }
-        if (!/[^A-Za-z0-9]/.test(value)) {
+        if (value.length < 8) return "Password must be at least 8 characters long";
+        if (!/[A-Za-z]/.test(value)) return "Password must contain at least one letter";
+        if (!/[0-9]/.test(value)) return "Password must contain at least one number";
+        if (!/[^A-Za-z0-9]/.test(value))
             return "Password must contain at least one special character (e.g. ! @ # $ %)";
-        }
         return null;
     };
 
+    const renderStrengthMeter = (value) => (
+        <div className="net-auth-strength">
+            <div className="net-auth-strength-bar-track">
+                <div
+                    className="net-auth-strength-bar-fill"
+                    style={{
+                        width: `${(passwordScore(value) / 4) * 100}%`,
+                        background: passwordStrengthColor(value),
+                    }}
+                />
+            </div>
+
+            <span
+                className="net-auth-strength-label"
+                style={{ color: passwordStrengthColor(value) }}
+            >
+                {passwordStrengthLabel(value)}
+            </span>
+
+            <ul className="net-auth-checklist">
+                <li className={passwordChecks(value).length ? "met" : ""}>
+                    {passwordChecks(value).length ? "✓" : "○"} 8+ characters
+                </li>
+                <li className={passwordChecks(value).letter ? "met" : ""}>
+                    {passwordChecks(value).letter ? "✓" : "○"} Letter
+                </li>
+                <li className={passwordChecks(value).number ? "met" : ""}>
+                    {passwordChecks(value).number ? "✓" : "○"} Number
+                </li>
+                <li className={passwordChecks(value).special ? "met" : ""}>
+                    {passwordChecks(value).special ? "✓" : "○"} Special character
+                </li>
+            </ul>
+        </div>
+    );
+
+    // ---------- Login ----------
     const handleLoginSubmit = async (event) => {
         event.preventDefault();
-
         setLoading(true);
         setMessage(null);
 
         try {
             const response = await fetch(`${apiUrl}/login`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    username: email,
-                    password: password,
-                }),
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username: email, password: password }),
             });
 
             const data = await response.json().catch(() => null);
@@ -101,9 +130,9 @@ function Auth({ apiUrl, onAuthSuccess }) {
         }
     };
 
+    // ---------- Register ----------
     const handleRegisterSubmit = async (event) => {
         event.preventDefault();
-
         setLoading(true);
         setMessage(null);
 
@@ -115,12 +144,16 @@ function Auth({ apiUrl, onAuthSuccess }) {
             return;
         }
 
+        if (password !== confirmPassword) {
+            setMessage({ type: "error", text: "Passwords do not match" });
+            setLoading(false);
+            return;
+        }
+
         try {
             const response = await fetch(`${apiUrl}/register`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     username: email,
                     email: email,
@@ -147,22 +180,17 @@ function Auth({ apiUrl, onAuthSuccess }) {
         }
     };
 
+    // ---------- Verify account (after register) ----------
     const handleVerifySubmit = async (event) => {
         event.preventDefault();
-
         setLoading(true);
         setMessage(null);
 
         try {
             const response = await fetch(`${apiUrl}/verify-email`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    email: email,
-                    code: code,
-                }),
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: email, code: code }),
             });
 
             const data = await response.json().catch(() => null);
@@ -172,7 +200,6 @@ function Auth({ apiUrl, onAuthSuccess }) {
             }
 
             showToast("Account verified! Welcome aboard 🎉", "success");
-
             localStorage.setItem("token", data.access_token);
 
             setTimeout(() => {
@@ -195,9 +222,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
         try {
             const response = await fetch(`${apiUrl}/resend-verification-code`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: email }),
             });
 
@@ -217,18 +242,16 @@ function Auth({ apiUrl, onAuthSuccess }) {
             setLoading(false);
         }
     };
+    // ---------- Forgot password: step 1, request code ----------
     const handleForgotPasswordSubmit = async (event) => {
         event.preventDefault();
-
         setLoading(true);
         setMessage(null);
 
         try {
             const response = await fetch(`${apiUrl}/forgot-password`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: email }),
             });
 
@@ -239,7 +262,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
             }
 
             showToast("If this email exists, a reset code was sent 📧", "success");
-            setMode("reset");
+            setMode("reset-code");
         } catch (err) {
             setMessage({
                 type: "error",
@@ -250,9 +273,22 @@ function Auth({ apiUrl, onAuthSuccess }) {
         }
     };
 
+    // ---------- Forgot password: step 2, enter the code only ----------
+    const handleResetCodeSubmit = (event) => {
+        event.preventDefault();
+        setMessage(null);
+
+        if (resetCode.trim().length !== 6) {
+            setMessage({ type: "error", text: "Please enter the 6-digit code" });
+            return;
+        }
+
+        setMode("reset-password");
+    };
+
+    // ---------- Forgot password: step 3, set the new password ----------
     const handleResetPasswordSubmit = async (event) => {
         event.preventDefault();
-
         setLoading(true);
         setMessage(null);
 
@@ -264,15 +300,19 @@ function Auth({ apiUrl, onAuthSuccess }) {
             return;
         }
 
+        if (newPassword !== confirmNewPassword) {
+            setMessage({ type: "error", text: "Passwords do not match" });
+            setLoading(false);
+            return;
+        }
+
         try {
             const response = await fetch(`${apiUrl}/reset-password`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     email: email,
-                    code: code,
+                    code: resetCode,
                     new_password: newPassword,
                 }),
             });
@@ -284,7 +324,6 @@ function Auth({ apiUrl, onAuthSuccess }) {
             }
 
             showToast("Password reset successful! Signing you in...", "success");
-
             localStorage.setItem("token", data.access_token);
 
             setTimeout(() => {
@@ -295,18 +334,18 @@ function Auth({ apiUrl, onAuthSuccess }) {
                 type: "error",
                 text: err.message || "Invalid or expired code.",
             });
+            setMode("reset-code");
         } finally {
             setLoading(false);
         }
     };
 
+    const showToggleTabs = mode === "login" || mode === "register";
+
     return (
         <div className="net-auth-page">
-
             {toast && (
-                <div className={`net-toast ${toast.type}`}>
-                    {toast.text}
-                </div>
+                <div className={`net-toast ${toast.type}`}>{toast.text}</div>
             )}
 
             <svg className="net-auth-bg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
@@ -321,7 +360,6 @@ function Auth({ apiUrl, onAuthSuccess }) {
                 <line x1="140" y1="720" x2="500" y2="850" className="net-line" />
                 <line x1="860" y1="380" x2="900" y2="700" className="net-line" />
                 <line x1="900" y1="700" x2="500" y2="850" className="net-line" />
-
                 {[
                     [120, 150], [380, 260], [700, 180], [860, 380],
                     [320, 520], [620, 600], [140, 720], [500, 850], [900, 700],
@@ -338,14 +376,13 @@ function Auth({ apiUrl, onAuthSuccess }) {
             </svg>
 
             <div className="net-auth-card">
-
                 <div className="net-auth-brand">
                     <div className="net-auth-logo">🌐</div>
                     <h1>Network Digital Twin</h1>
                     <p>Real-time network topology monitoring</p>
                 </div>
 
-                {mode !== "verify" && mode !== "forgot" && mode !== "reset" && (
+                {showToggleTabs && (
                     <div className="net-auth-toggle">
                         <button
                             className={mode === "login" ? "active" : ""}
@@ -354,7 +391,6 @@ function Auth({ apiUrl, onAuthSuccess }) {
                         >
                             Sign In
                         </button>
-
                         <button
                             className={mode === "register" ? "active" : ""}
                             onClick={() => switchMode("register")}
@@ -464,41 +500,20 @@ function Auth({ apiUrl, onAuthSuccess }) {
                             </div>
                         </label>
 
-                        {password.length > 0 && (
-                            <div className="net-auth-strength">
-                                <div className="net-auth-strength-bar-track">
-                                    <div
-                                        className="net-auth-strength-bar-fill"
-                                        style={{
-                                            width: `${(passwordScore / 4) * 100}%`,
-                                            background: passwordStrengthColor(),
-                                        }}
-                                    />
-                                </div>
-
-                                <span
-                                    className="net-auth-strength-label"
-                                    style={{ color: passwordStrengthColor() }}
-                                >
-                                    {passwordStrengthLabel()}
-                                </span>
-
-                                <ul className="net-auth-checklist">
-                                    <li className={passwordChecks.length ? "met" : ""}>
-                                        {passwordChecks.length ? "✓" : "○"} 8+ characters
-                                    </li>
-                                    <li className={passwordChecks.letter ? "met" : ""}>
-                                        {passwordChecks.letter ? "✓" : "○"} Letter
-                                    </li>
-                                    <li className={passwordChecks.number ? "met" : ""}>
-                                        {passwordChecks.number ? "✓" : "○"} Number
-                                    </li>
-                                    <li className={passwordChecks.special ? "met" : ""}>
-                                        {passwordChecks.special ? "✓" : "○"} Special character
-                                    </li>
-                                </ul>
+                        <label>
+                            Confirm Password
+                            <div className="net-auth-password-wrapper">
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    value={confirmPassword}
+                                    onChange={(event) => setConfirmPassword(event.target.value)}
+                                    placeholder="Re-enter your password"
+                                    required
+                                />
                             </div>
-                        )}
+                        </label>
+
+                        {password.length > 0 && renderStrengthMeter(password)}
 
                         <button type="submit" className="net-auth-submit" disabled={loading}>
                             {loading ? "Creating account..." : "Create Account"}
@@ -518,7 +533,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
                                 type="text"
                                 value={code}
                                 onChange={(event) => setCode(event.target.value)}
-                                placeholder="123456"
+                                placeholder="• • • • • •"
                                 maxLength={6}
                                 required
                                 className="net-auth-code-input"
@@ -528,6 +543,7 @@ function Auth({ apiUrl, onAuthSuccess }) {
                         <button type="submit" className="net-auth-submit" disabled={loading}>
                             {loading ? "Verifying..." : "Verify Account"}
                         </button>
+
                         <button
                             type="button"
                             className="net-auth-resend"
@@ -570,24 +586,45 @@ function Auth({ apiUrl, onAuthSuccess }) {
                     </form>
                 )}
 
-                {mode === "reset" && (
-                    <form onSubmit={handleResetPasswordSubmit} className="net-auth-form">
+                {mode === "reset-code" && (
+                    <form onSubmit={handleResetCodeSubmit} className="net-auth-form">
                         <p className="net-auth-hint">
-                            Enter the code sent to <strong>{email}</strong> and choose a new password.
+                            Enter the 6-digit code sent to <strong>{email}</strong>.
                         </p>
 
                         <label>
                             Reset Code
                             <input
                                 type="text"
-                                value={code}
-                                onChange={(event) => setCode(event.target.value)}
-                                placeholder="123456"
+                                value={resetCode}
+                                onChange={(event) => setResetCode(event.target.value)}
+                                placeholder="• • • • • •"
                                 maxLength={6}
                                 required
                                 className="net-auth-code-input"
                             />
                         </label>
+
+                        <button type="submit" className="net-auth-submit">
+                            Continue
+                        </button>
+
+                        <button
+                            type="button"
+                            className="net-auth-resend"
+                            onClick={handleForgotPasswordSubmit}
+                            disabled={loading}
+                        >
+                            Didn't get a code? Resend
+                        </button>
+                    </form>
+                )}
+
+                {mode === "reset-password" && (
+                    <form onSubmit={handleResetPasswordSubmit} className="net-auth-form">
+                        <p className="net-auth-hint">
+                            Choose a new password for <strong>{email}</strong>.
+                        </p>
 
                         <label>
                             New Password
@@ -610,24 +647,29 @@ function Auth({ apiUrl, onAuthSuccess }) {
                             </div>
                         </label>
 
+                        <label>
+                            Confirm New Password
+                            <div className="net-auth-password-wrapper">
+                                <input
+                                    type={showNewPassword ? "text" : "password"}
+                                    value={confirmNewPassword}
+                                    onChange={(event) => setConfirmNewPassword(event.target.value)}
+                                    placeholder="Re-enter new password"
+                                    required
+                                />
+                            </div>
+                        </label>
+
+                        {newPassword.length > 0 && renderStrengthMeter(newPassword)}
+
                         <button type="submit" className="net-auth-submit" disabled={loading}>
                             {loading ? "Resetting..." : "Reset Password"}
                         </button>
-
-                        <button
-                            type="button"
-                            className="net-auth-resend"
-                            onClick={handleForgotPasswordSubmit}
-                            disabled={loading}
-                        >
-                            Didn't get a code? Resend
-                        </button>
                     </form>
                 )}
-
             </div>
-
         </div>
     );
 }
+
 export default Auth;
